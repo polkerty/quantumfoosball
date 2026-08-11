@@ -67,6 +67,7 @@
   #scrollPref { margin-top: 12px; }
   #scrollPref button { min-width: 0; padding: 7px 14px; font-size: 11px; letter-spacing: 0.1em; border-width: 1.5px; color: var(--ink-soft); border-color: var(--ink-soft); }
   #scrollPref button:hover, #scrollPref button:focus-visible { background: var(--ink-soft); color: var(--card); }
+  #menu .build { margin-top: 12px; font-size: 10px; letter-spacing: 0.22em; color: rgba(109, 92, 66, 0.55); }
   #menu .help { margin-top: 22px; font-size: 12px; line-height: 1.85; color: var(--ink-soft); text-align: left; border-top: 1px solid rgba(36,28,18,0.25); padding-top: 14px; }
   #menu .help b { color: var(--ink); font-weight: 600; }
   #menu .help .p1 { color: var(--red); font-weight: 600; } #menu .help .p2 { color: var(--blue); font-weight: 600; }
@@ -125,6 +126,7 @@
       <b class="p2">Blue</b> — either way, you defend the left goal and attack to your right.<br>
       <b>The ball:</b> a complex wavefunction under the Schrödinger equation.
     </div>
+    <div class="build" id="buildTag"></div>
   </div>
 </div>
 <button id="menuBtn">MENU</button>
@@ -1062,6 +1064,7 @@ function kick(pIdx, dir) {
 // for tick T+NET_DELAY and only advances tick T once both inputs for T exist,
 // so both machines run the identical simulation from a shared seed.
 const PROTO = 2; // lockstep protocol version — bump on any input-schema or sim change
+const BUILD = 'r8'; // bump each deploy — shown on the menu so mismatched windows are obvious
 const NET = {
   phase: 'off', // 'off' | 'lobby' | 'play'
   room: null, partner: null, isHost: false, myIdx: 0,
@@ -1605,6 +1608,7 @@ function scrollPrefLabel() {
     'SCROLL GESTURE ↑ = ROD ' + (scrollFlip ? '↓' : '↑') + ' — TAP TO FLIP';
 }
 scrollPrefLabel();
+document.getElementById('buildTag').textContent = 'BUILD ' + BUILD + ' · NET PROTOCOL v' + PROTO;
 document.getElementById('btnScroll').addEventListener('click', () => {
   scrollFlip = !scrollFlip;
   try { localStorage.setItem('qf_scrollFlip', scrollFlip ? '1' : '0'); } catch (e) {}
@@ -1876,7 +1880,7 @@ function pump(now) {
     }
     if (n === 4) acc = 0;
   }
-  if (n > 0 && active) {
+  if (n > 0 && active && !document.hidden) { // throttled background ticks poison the average
     stepMsAvg = stepMsAvg * 0.95 + ((performance.now() - t0) / n) * 0.05;
     if (!degraded && mode !== 'net' && stepMsAvg > 14 && DT < 1 / 61) {
       degraded = true; DT = 1 / 60; buildK(DT);
@@ -1903,8 +1907,29 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
-// keep the sim (and lockstep partner) fed while the tab is hidden
-setInterval(() => { if (document.hidden) pump(performance.now()); }, 50);
+// Hidden-tab policy: pause the sim entirely (it resumes where it left off),
+// EXCEPT during a live online match, which must keep feeding the lockstep
+// partner. A lobby left hidden too long is abandoned — background tabs churn
+// WebRTC offers and the player isn't really "waiting" anymore.
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    hiddenAt = performance.now();
+  } else {
+    hiddenAt = 0;
+    last = performance.now(); // no catch-up burst on return
+    acc = 0;
+  }
+});
+setInterval(() => {
+  if (!document.hidden) return;
+  const now = performance.now();
+  if (mode === 'net' && NET.phase === 'play') pump(now);
+  else if (NET.phase === 'lobby' && hiddenAt && now - hiddenAt > 90000) {
+    leaveOnline();
+    toMenu('LEFT THE LOBBY WHILE YOU WERE AWAY');
+  }
+}, 50);
 
 drawTable(bg.getContext('2d'));
 
