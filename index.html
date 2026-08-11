@@ -67,6 +67,7 @@
   #menu .build { margin-top: 12px; font-size: 10px; letter-spacing: 0.22em; color: rgba(109, 92, 66, 0.55); }
   #menu .help { margin-top: 22px; font-size: 12px; line-height: 1.85; color: var(--ink-soft); text-align: left; border-top: 1px solid rgba(36,28,18,0.25); padding-top: 14px; }
   #menu .help b { color: var(--ink); font-weight: 600; }
+  #menu .help .divider { height: 1px; background: rgba(36, 28, 18, 0.25); margin: 10px 0; }
   #menu .help .p1 { color: var(--red); font-weight: 600; } #menu .help .p2 { color: var(--blue); font-weight: 600; }
 
   #menuBtn {
@@ -115,12 +116,13 @@
     </div>
     <div class="help">
       The ball is a complex wavefunction under the Schrödinger equation.<br>
-      <b>House rules:</b> herd ≥50% of the ball's probability into the far goal. First to 5.<br>
-      <b>Move:</b> W/S or ↑/↓ &nbsp;·&nbsp; <b>Kick:</b> D / → / Space forward · A / ← back<br>
-      <b>Solo rod:</b> scroll up/down while hovering over one of your rods to move it alone<br>
-      <b>Touch:</b> drag to move rods · flick sideways or tap to kick<br>
+      House rules: herd ≥50% of the ball's probability into the far goal. First to 5.<br>
       You play <b class="p1">Red</b> against the bot; in the lobby you may draw <b class="p1">Red</b> or
       <b class="p2">Blue</b>.
+      <div class="divider"></div>
+      <b>Move:</b> W/S or ↑/↓ &nbsp;·&nbsp; <b>Kick:</b> D / → / Space forward · A / ← back<br>
+      <b>Solo rod:</b> scroll up/down while hovering over one of your rods to move it alone<br>
+      <b>Touch:</b> drag to move rods · flick sideways or tap to kick
     </div>
     <div class="build" id="buildTag"></div>
   </div>
@@ -1060,7 +1062,7 @@ function kick(pIdx, dir) {
 // for tick T+NET_DELAY and only advances tick T once both inputs for T exist,
 // so both machines run the identical simulation from a shared seed.
 const PROTO = 2; // lockstep protocol version — bump on any input-schema or sim change
-const BUILD = 'r11'; // bump each deploy — shown on the menu so mismatched windows are obvious
+const BUILD = 'r12'; // bump each deploy — shown on the menu so mismatched windows are obvious
 const NET = {
   phase: 'off', // 'off' | 'lobby' | 'play'
   room: null, partner: null, isHost: false, myIdx: 0,
