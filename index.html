@@ -577,48 +577,58 @@ async function goOnline() {
       return;
     }
   }
-  NET.phase = 'lobby';
-  NET.peers.clear(); NET.busy.clear();
-  const room = TRY.joinRoom({ appId: CFG.APP_ID }, 'lobby');
-  NET.room = room;
-  const [sendStart, onStart] = room.makeAction('start');
-  const [sendIn, onIn] = room.makeAction('in');
-  const [sendSum, onSum] = room.makeAction('sum');
-  const [sendBye, onBye] = room.makeAction('bye');
-  const [sendBusy, onBusy] = room.makeAction('busy');
-  NET.send = { start: sendStart, in: sendIn, sum: sendSum, bye: sendBye, busy: sendBusy };
+  try {
+    NET.phase = 'lobby';
+    NET.peers.clear(); NET.busy.clear();
+    const room = TRY.joinRoom({ appId: CFG.APP_ID }, 'lobby');
+    NET.room = room;
+    // trystero 0.25 API: makeAction returns {send, onMessage}; peer events are
+    // assignable properties; send targets via {target} option
+    const acts = {};
+    for (const name of ['start', 'in', 'sum', 'bye', 'busy']) acts[name] = room.makeAction(name);
+    NET.send = {};
+    for (const name of Object.keys(acts)) {
+      NET.send[name] = (data, target) => acts[name].send(data, target ? { target } : undefined);
+    }
 
-  room.onPeerJoin((id) => {
-    NET.peers.add(id);
-    if (NET.phase === 'play') NET.send.busy({ b: 1 }, id);
-    else tryMatch();
+    room.onPeerJoin = (id) => {
+      NET.peers.add(id);
+      if (NET.phase === 'play') NET.send.busy({ b: 1 }, id);
+      else tryMatch();
+      updateLobby();
+    };
+    room.onPeerLeave = (id) => {
+      NET.peers.delete(id); NET.busy.delete(id);
+      if (NET.partner === id && NET.phase === 'play') endNet('OPPONENT DISCONNECTED');
+      else { tryMatch(); updateLobby(); }
+    };
+    acts.busy.onMessage = (d, { peerId }) => {
+      if (d.b) NET.busy.add(peerId); else NET.busy.delete(peerId);
+      tryMatch(); updateLobby();
+    };
+    acts.start.onMessage = (d, { peerId }) => {
+      if (NET.phase !== 'lobby') return;
+      beginMatch(peerId, false, d.seed >>> 0);
+    };
+    acts.in.onMessage = (d, { peerId }) => {
+      if (NET.phase === 'play' && peerId === NET.partner) NET.inQ[1 - NET.myIdx].set(d.t, d);
+    };
+    acts.sum.onMessage = (d, { peerId }) => {
+      if (NET.phase !== 'play' || peerId !== NET.partner) return;
+      const mine = NET.sums.get(d.t);
+      if (mine !== undefined && mine !== d.h) endNet('QUANTUM DESYNC — MATCH VOID');
+    };
+    acts.bye.onMessage = (d, { peerId }) => {
+      if (peerId === NET.partner && NET.phase === 'play') endNet('OPPONENT LEFT');
+    };
     updateLobby();
-  });
-  room.onPeerLeave((id) => {
-    NET.peers.delete(id); NET.busy.delete(id);
-    if (NET.partner === id && NET.phase === 'play') endNet('OPPONENT DISCONNECTED');
-    else { tryMatch(); updateLobby(); }
-  });
-  onBusy((d, id) => {
-    if (d.b) NET.busy.add(id); else NET.busy.delete(id);
-    tryMatch(); updateLobby();
-  });
-  onStart((d, id) => {
-    if (NET.phase !== 'lobby') return;
-    beginMatch(id, false, d.seed >>> 0);
-  });
-  onIn((d, id) => {
-    if (NET.phase === 'play' && id === NET.partner) NET.inQ[1 - NET.myIdx].set(d.t, d);
-  });
-  onSum((d, id) => {
-    if (NET.phase !== 'play' || id !== NET.partner) return;
-    const mine = NET.sums.get(d.t);
-    if (mine !== undefined && mine !== d.h) endNet('QUANTUM DESYNC — MATCH VOID');
-  });
-  onBye((d, id) => {
-    if (id === NET.partner && NET.phase === 'play') endNet('OPPONENT LEFT');
-  });
-  updateLobby();
+  } catch (err) {
+    console.error('lobby setup failed:', err);
+    try { if (NET.room) NET.room.leave(); } catch (e) {}
+    NET.room = null; NET.phase = 'off';
+    setLobby('');
+    document.getElementById('menuMsg').textContent = 'LOBBY ERROR: ' + (err && err.message ? err.message : err);
+  }
 }
 
 function freeIds() {
