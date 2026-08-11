@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Foosenball</title>
+<title>Quantum Foosball</title>
 <style>
   /* Mid-century sports-program: paper, walnut, letterpress ink, one vermillion accent */
   :root {
@@ -82,9 +82,9 @@
 
 <div id="menu">
   <div class="card">
-    <h1>FOOSEN<em>BALL</em></h1>
+    <h1>QUANTUM <em>FOOSBALL</em></h1>
     <div class="rule"></div>
-    <div class="tag">Regulation table · Nonregulation ball</div>
+    <div class="tag">Foosenball · Regulation table · Nonregulation ball</div>
     <div class="msg" id="menuMsg"></div>
     <div class="btns" id="menuBtns">
       <button id="btn1p">1P · VS THE HOUSE</button>
@@ -1159,9 +1159,9 @@ function drawHUD(gy) {
   const meTag = (i) => mode === 'net' && NET.myIdx === i ? ' · YOU' : '';
   ctx.fillStyle = players[0].color; ctx.fillText('RED' + meTag(0), FX + 122, 38);
   ctx.fillStyle = players[1].color; ctx.fillText('BLUE' + meTag(1), FX + FW - 122, 38);
-  ctx.font = '700 21px ' + FONT_D;
+  ctx.font = '700 19px ' + FONT_D;
   ctx.fillStyle = INK;
-  ctx.fillText('F O O S E N B A L L', CW / 2, 28);
+  ctx.fillText('Q U A N T U M   F O O S B A L L', CW / 2, 28);
   ctx.font = '600 11px ' + FONT_D;
   ctx.fillStyle = INK_SOFT + '0.8)';
   const label = mode === '1p' ? 'VS THE HOUSE' : mode === '2p' ? 'SAME TABLE' : 'OPEN CHALLENGE · P2P';

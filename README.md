@@ -1,4 +1,4 @@
-# Foosenball
+# Quantum Foosball (Foosenball)
 
 Foosball, except the ball is a genuine quantum wavefunction.
 
