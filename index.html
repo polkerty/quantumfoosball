@@ -97,6 +97,7 @@
     <div class="help">
       <b>House rules:</b> herd ≥50% of the ball's probability into the far goal. First to 5.<br>
       <b>Move:</b> W/S or ↑/↓ &nbsp;·&nbsp; <b>Kick:</b> D / → / Space forward · A / ← back<br>
+      <b>Solo rod:</b> scroll up/down while hovering over one of your rods to move it alone<br>
       <b>Touch:</b> drag to move rods · flick sideways or tap to kick<br>
       You play <b class="p1">Red</b> against the bot; in the lobby you may draw <b class="p1">Red</b> or
       <b class="p2">Blue</b> — either way, you defend the left goal and attack to your right.<br>
@@ -555,6 +556,7 @@ const CFG = {
   KICK_REACH: 58, KICK_DUR: 0.26, KICK_CD: 0.34,
   GOAL_FRACTION: 0.5,      // probability needed in a goal to score
   COLLAPSE_FIELD: 0.12,    // field mass below this => wavefunction collapse
+  TUNNEL_T: 0.06,          // intensity fraction a fast wave transmits through a foosman per pass
   WIN_SCORE: 5,
   BOT: { speed: 1.35, react: 0.09, noise: 16, kickMass: 0.015 },
   NET_GRID: 256,           // common grid width for online matches (both machines must agree)
@@ -612,7 +614,7 @@ const RODS = [];
   for (let i = 0; i < 8; i++) {
     const n = counts[i], sp = SPACING[n];
     const span = (n - 1) * sp + MAN_H;
-    RODS.push({ x: FW * (i + 0.5) / 8, n, sp, span, travel: FH - span, owner: owners[i], top: 0, vy: 0 });
+    RODS.push({ x: FW * (i + 0.5) / 8, n, sp, span, travel: FH - span, owner: owners[i], top: 0, vy: 0, uOff: 0, uOffS: 0 });
   }
 }
 
@@ -776,11 +778,23 @@ function boundaries() {
       }
     }
   }
+  // Foosmen are GRAY moving mirrors:
+  // - tunneling: amplitude that penetrates deep in one step (only fast waves can)
+  //   transmits a fraction √T straight through; the rest mirrors with √(1−T).
+  //   Slow contact never reaches the depth gate, so transmission rises with
+  //   speed — just like a real barrier.
+  // - Doppler: amplitude mirrored off a moving face picks up 2·v_rod of
+  //   momentum (e^{i·2v/ħ·y}), so slamming a rod genuinely fires the wave.
+  const TUN_S = Math.sqrt(CFG.TUNNEL_T), TUN_R = Math.sqrt(1 - CFG.TUNNEL_T);
+  const tunDepth = 0.5 * KICK_V * DT; // units of penetration reachable only at speed
   for (const rod of RODS) {
     if (players[rod.owner].kick) continue; // feet up while kicking
     const c0 = Math.max(WALLX, Math.round((rod.x - MAN_W / 2) / CX));
     const c1 = Math.min(NX - 1 - WALLX, Math.round((rod.x + MAN_W / 2) / CX) - 1);
     if (c1 < c0) continue;
+    const rodWc = c1 - c0 + 1;
+    const moving = rod.vy > 25 || rod.vy < -25;
+    const kb = moving ? clamp(2 * rod.vy / CFG.HB, -0.6 * KYMAX, 0.6 * KYMAX) : 0;
     for (let k = 0; k < rod.n; k++) {
       const my = rod.top + MAN_H / 2 + k * rod.sp;
       const r0 = Math.max(WALLY, Math.round((my - MAN_H / 2) / CY));
@@ -794,14 +808,33 @@ function boundaries() {
           if (a === 0 && b === 0) continue;
           const dxl = ix - c0, dxr = c1 - ix;
           const m = Math.min(dxl, dxr, dyt, dyb);
-          let tx = ix, ty = iy;
+          let tx = ix, ty = iy, yFace = false;
           if (m === dxl) tx = 2 * c0 - 1 - ix;
           else if (m === dxr) tx = 2 * c1 + 1 - ix;
-          else if (m === dyt) ty = 2 * r0 - 1 - iy;
-          else ty = 2 * r1 + 1 - iy;
+          else if (m === dyt) { ty = 2 * r0 - 1 - iy; yFace = true; }
+          else { ty = 2 * r1 + 1 - iy; yFace = true; }
+
+          // tunneling through the foot (x-faces only)
+          let refA = a, refB = b;
+          if (!yFace && m * CX >= tunDepth) {
+            const t2x = m === dxl ? ix + rodWc : ix - rodWc;
+            if (t2x >= WALLX && t2x < NX - WALLX) {
+              const t2 = row + t2x;
+              re[t2] += TUN_S * a; im[t2] += TUN_S * b; // transmitted, phase preserved
+              refA = TUN_R * a; refB = TUN_R * b;
+            }
+          }
           if (tx >= WALLX && tx < NX - WALLX && ty >= WALLY && ty < NY - WALLY) {
             const t = ty * NX + tx;
-            re[t] -= a; im[t] -= b;
+            if (yFace && moving) {
+              // moving-mirror Doppler boost on the reflected component
+              const ph = kb * (ty + 0.5) * CY;
+              const cr = dcos(ph), ci = dsin(ph);
+              re[t] -= refA * cr - refB * ci;
+              im[t] -= refA * ci + refB * cr;
+            } else {
+              re[t] -= refA; im[t] -= refB;
+            }
           }
           re[i] = 0; im[i] = 0;
         }
@@ -940,7 +973,8 @@ function tickSim() {
     p.u += (p.uT - p.u) * Math.min(1, 18 * dt);
   }
   for (const rod of RODS) {
-    const top = players[rod.owner].u * rod.travel;
+    rod.uOffS += (rod.uOff - rod.uOffS) * Math.min(1, 18 * dt);
+    const top = clamp(players[rod.owner].u + rod.uOffS, 0, 1) * rod.travel;
     rod.vy = (top - rod.top) / dt;
     rod.top = top;
   }
@@ -980,14 +1014,19 @@ function kick(pIdx, dir) {
 // Delay-based lockstep over a P2P DataChannel. Each side schedules its input
 // for tick T+NET_DELAY and only advances tick T once both inputs for T exist,
 // so both machines run the identical simulation from a shared seed.
+const PROTO = 2; // lockstep protocol version — bump on any input-schema or sim change
 const NET = {
   phase: 'off', // 'off' | 'lobby' | 'play'
   room: null, partner: null, isHost: false, myIdx: 0,
   tick: 0, inQ: [new Map(), new Map()],
-  myUT: 0.5, pendingKicks: [],
+  myUT: 0.5, pendingKicks: [], myOff: [0, 0, 0, 0],
   sums: new Map(), stallT: 0,
   send: {}, peers: new Set(), busy: new Set(),
 };
+
+function resetRodOffsets() {
+  for (const rod of RODS) { rod.uOff = 0; rod.uOffS = 0; }
+}
 let TRY = null;
 
 async function goOnline() {
@@ -1036,6 +1075,11 @@ async function goOnline() {
     };
     acts.start.onMessage = (d, { peerId }) => {
       if (NET.phase !== 'lobby') return;
+      if (d.v !== PROTO) {
+        setLobby('');
+        document.getElementById('menuMsg').textContent = 'VERSION MISMATCH — BOTH PLAYERS REFRESH THE PAGE';
+        return;
+      }
       beginMatch(peerId, false, d.seed >>> 0);
     };
     acts.in.onMessage = (d, { peerId }) => {
@@ -1079,7 +1123,7 @@ function tryMatch() {
       const ids2 = freeIds();
       if (ids2[0] !== TRY.selfId || ids2[1] !== target) return;
       const seed = (Math.random() * 4294967296) >>> 0;
-      NET.send.start({ seed }, target);
+      NET.send.start({ seed, v: PROTO }, target);
       beginMatch(target, true, seed);
     }, 500);
   }
@@ -1092,10 +1136,11 @@ function beginMatch(partnerId, isHost, seed) {
   NET.tick = 0; NET.stallT = 0;
   NET.inQ = [new Map(), new Map()];
   NET.sums.clear();
-  NET.myUT = 0.5; NET.pendingKicks = [];
+  NET.myUT = 0.5; NET.pendingKicks = []; NET.myOff = [0, 0, 0, 0];
+  resetRodOffsets();
   for (let t = 0; t < CFG.NET_DELAY; t++) {
-    NET.inQ[0].set(t, { t, u: 500, k: [] });
-    NET.inQ[1].set(t, { t, u: 500, k: [] });
+    NET.inQ[0].set(t, { t, u: 500, k: [], o: [0, 0, 0, 0] });
+    NET.inQ[1].set(t, { t, u: 500, k: [], o: [0, 0, 0, 0] });
   }
   NET.send.busy({ b: 1 });
   DT = CFG.DT_BASE;
@@ -1122,7 +1167,12 @@ function netProduceInput(forTick) {
   if (keys.has('KeyW') || keys.has('ArrowUp')) d -= 1;
   if (keys.has('KeyS') || keys.has('ArrowDown')) d += 1;
   NET.myUT = clamp(NET.myUT + d * sp * dt, 0, 1);
-  const msg = { t: forTick, u: Math.round(NET.myUT * 1000), k: NET.pendingKicks.splice(0) };
+  const msg = {
+    t: forTick,
+    u: Math.round(NET.myUT * 1000),
+    k: NET.pendingKicks.splice(0),
+    o: NET.myOff.map((v) => Math.round(v * 1000)),
+  };
   NET.inQ[NET.myIdx].set(forTick, msg);
   NET.send.in(msg, NET.partner);
 }
@@ -1135,6 +1185,10 @@ function netTick() {
   for (let idx = 0; idx < 2; idx++) {
     const inp = idx === 0 ? a : b;
     players[idx].uT = inp.u / 1000;
+    if (inp.o) {
+      let j = 0;
+      for (const rod of RODS) if (rod.owner === idx) rod.uOff = (inp.o[j++] || 0) / 1000;
+    }
     for (const dir of inp.k) kick(idx, dir);
     NET.inQ[idx].delete(t);
   }
@@ -1172,6 +1226,7 @@ function leaveOnline() {
     mode = '1p';
     DT = degraded ? 1 / 60 : CFG.DT_BASE;
     initGrid(LOCAL_NX, 128);
+    resetRodOffsets();
     serve();
   }
   setLobby('');
@@ -1353,6 +1408,7 @@ function startGame(m) {
   players[0].u = players[0].uT = players[1].u = players[1].uT = 0.5;
   players[0].kick = players[1].kick = null;
   players[0].cd = players[1].cd = 0;
+  resetRodOffsets();
   serve();
   state = 'play'; banner = null;
   document.getElementById('menu').style.display = 'none';
@@ -1466,6 +1522,30 @@ function pointerEnd(e) {
 cv.addEventListener('pointerup', pointerEnd);
 cv.addEventListener('pointercancel', (e) => touches.delete(e.pointerId));
 cv.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// scroll over one of your rods to move just that rod
+cv.addEventListener('wheel', (e) => {
+  if (state !== 'play') return;
+  e.preventDefault();
+  const r = cv.getBoundingClientRect();
+  let lx = (e.clientX - r.left) * (CW / r.width) - FX;
+  if (isMirrored()) lx = FW - lx;
+  const owner = mode === 'net' ? NET.myIdx : mode === '2p' ? (lx < FW / 2 ? 0 : 1) : 0;
+  let best = null, bd = 70; // capture radius: half the rod spacing
+  for (const rod of RODS) {
+    if (rod.owner !== owner) continue;
+    const d = Math.abs(rod.x - lx);
+    if (d < bd) { bd = d; best = rod; }
+  }
+  if (!best) return;
+  const du = clamp(e.deltaY, -120, 120) * 0.0016;
+  if (mode === 'net') {
+    const idx = RODS.filter((rd) => rd.owner === owner).indexOf(best);
+    NET.myOff[idx] = clamp(NET.myOff[idx] + du, -1, 1);
+  } else {
+    best.uOff = clamp(best.uOff + du, -1, 1);
+  }
+}, { passive: false });
 
 document.getElementById('btn1p').addEventListener('click', () => startGame('1p'));
 document.getElementById('btnNet').addEventListener('click', goOnline);
