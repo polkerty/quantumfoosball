@@ -64,9 +64,6 @@
   #lobby .pulse { animation: pulse 1.4s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
   #lobby button { margin-top: 12px; min-width: 130px; padding: 10px 16px; font-size: 12px; }
-  #scrollPref { margin-top: 12px; }
-  #scrollPref button { min-width: 0; padding: 7px 14px; font-size: 11px; letter-spacing: 0.1em; border-width: 1.5px; color: var(--ink-soft); border-color: var(--ink-soft); }
-  #scrollPref button:hover, #scrollPref button:focus-visible { background: var(--ink-soft); color: var(--card); }
   #menu .build { margin-top: 12px; font-size: 10px; letter-spacing: 0.22em; color: rgba(109, 92, 66, 0.55); }
   #menu .help { margin-top: 22px; font-size: 12px; line-height: 1.85; color: var(--ink-soft); text-align: left; border-top: 1px solid rgba(36,28,18,0.25); padding-top: 14px; }
   #menu .help b { color: var(--ink); font-weight: 600; }
@@ -116,7 +113,6 @@
       <div class="status pulse" id="lobbyStatus">CONNECTING…</div>
       <button id="btnCancel">CANCEL</button>
     </div>
-    <div id="scrollPref"><button id="btnScroll"></button></div>
     <div class="help">
       <b>House rules:</b> herd ≥50% of the ball's probability into the far goal. First to 5.<br>
       <b>Move:</b> W/S or ↑/↓ &nbsp;·&nbsp; <b>Kick:</b> D / → / Space forward · A / ← back<br>
@@ -1064,7 +1060,7 @@ function kick(pIdx, dir) {
 // for tick T+NET_DELAY and only advances tick T once both inputs for T exist,
 // so both machines run the identical simulation from a shared seed.
 const PROTO = 2; // lockstep protocol version — bump on any input-schema or sim change
-const BUILD = 'r8'; // bump each deploy — shown on the menu so mismatched windows are obvious
+const BUILD = 'r9'; // bump each deploy — shown on the menu so mismatched windows are obvious
 const NET = {
   phase: 'off', // 'off' | 'lobby' | 'play'
   room: null, partner: null, isHost: false, myIdx: 0,
@@ -1598,24 +1594,9 @@ cv.addEventListener('pointerup', pointerEnd);
 cv.addEventListener('pointercancel', (e) => touches.delete(e.pointerId));
 cv.addEventListener('contextmenu', (e) => e.preventDefault());
 
-// scroll direction preference — the OS transforms wheel deltas before the
-// browser sees them (natural scrolling is undetectable), so this is a saved
-// per-device choice rather than auto-detection
-let scrollFlip = false;
-try { scrollFlip = localStorage.getItem('qf_scrollFlip') === '1'; } catch (e) {}
-function scrollPrefLabel() {
-  document.getElementById('btnScroll').textContent =
-    'SCROLL GESTURE ↑ = ROD ' + (scrollFlip ? '↓' : '↑') + ' — TAP TO FLIP';
-}
-scrollPrefLabel();
 document.getElementById('buildTag').textContent = 'BUILD ' + BUILD + ' · NET PROTOCOL v' + PROTO;
-document.getElementById('btnScroll').addEventListener('click', () => {
-  scrollFlip = !scrollFlip;
-  try { localStorage.setItem('qf_scrollFlip', scrollFlip ? '1' : '0'); } catch (e) {}
-  scrollPrefLabel();
-});
 
-// scroll over one of your rods to move just that rod
+// scroll over one of your rods to move just that rod (gesture up = rod up)
 cv.addEventListener('wheel', (e) => {
   if (state !== 'play') return;
   e.preventDefault();
@@ -1630,7 +1611,7 @@ cv.addEventListener('wheel', (e) => {
     if (d < bd) { bd = d; best = rod; }
   }
   if (!best) return;
-  const du = clamp(e.deltaY, -120, 120) * 0.0016 * (scrollFlip ? 1 : -1);
+  const du = clamp(e.deltaY, -120, 120) * -0.0016;
   if (mode === 'net') {
     const idx = RODS.filter((rd) => rd.owner === owner).indexOf(best);
     NET.myOff[idx] = clamp(NET.myOff[idx] + du, -1, 1);
