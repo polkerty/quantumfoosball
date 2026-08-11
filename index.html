@@ -963,22 +963,28 @@ function tickSim() {
   const dt = CFG.TICK;
   if (mode !== 'net' && state === 'play') {
     const sp = 2.4;
-    if (keys.has('KeyW')) players[0].uT = clamp(players[0].uT - sp * dt, 0, 1);
-    if (keys.has('KeyS')) players[0].uT = clamp(players[0].uT + sp * dt, 0, 1);
+    // uIntent accumulates ATTEMPTED movement (even when clamped at the rails),
+    // so holding into a boundary still recaptures solo-scrolled rods
+    const move = (idx, delta) => {
+      const p = players[idx];
+      p.uT = clamp(p.uT + delta, 0, 1);
+      p.uIntent = (p.uIntent || 0) + Math.abs(delta);
+    };
+    if (keys.has('KeyW')) move(0, -sp * dt);
+    if (keys.has('KeyS')) move(0, sp * dt);
     if (mode === '2p') {
-      if (keys.has('ArrowUp')) players[1].uT = clamp(players[1].uT - sp * dt, 0, 1);
-      if (keys.has('ArrowDown')) players[1].uT = clamp(players[1].uT + sp * dt, 0, 1);
+      if (keys.has('ArrowUp')) move(1, -sp * dt);
+      if (keys.has('ArrowDown')) move(1, sp * dt);
     } else {
-      if (keys.has('ArrowUp')) players[0].uT = clamp(players[0].uT - sp * dt, 0, 1);
-      if (keys.has('ArrowDown')) players[0].uT = clamp(players[0].uT + sp * dt, 0, 1);
+      if (keys.has('ArrowUp')) move(0, -sp * dt);
+      if (keys.has('ArrowDown')) move(0, sp * dt);
       botUpdate(dt);
     }
-    // moving all rods together gradually recaptures solo-scrolled rods
-    for (const p of players) {
-      const d = Math.abs(p.uT - (p.uTPrev ?? p.uT));
-      p.uTPrev = p.uT;
+    for (let idx = 0; idx < 2; idx++) {
+      const p = players[idx];
+      const d = p.uIntent || 0;
+      p.uIntent = 0;
       if (d > 1e-6) {
-        const idx = players.indexOf(p);
         for (const rod of RODS) if (rod.owner === idx) rod.uOff = shrink(rod.uOff, d * OFF_RECAPTURE);
       }
     }
@@ -1152,7 +1158,7 @@ function beginMatch(partnerId, isHost, seed) {
   NET.tick = 0; NET.stallT = 0;
   NET.inQ = [new Map(), new Map()];
   NET.sums.clear();
-  NET.myUT = 0.5; NET.myUTPrev = 0.5; NET.pendingKicks = []; NET.myOff = [0, 0, 0, 0];
+  NET.myUT = 0.5; NET.myIntent = 0; NET.pendingKicks = []; NET.myOff = [0, 0, 0, 0];
   resetRodOffsets();
   for (let t = 0; t < CFG.NET_DELAY; t++) {
     NET.inQ[0].set(t, { t, u: 500, k: [], o: [0, 0, 0, 0] });
@@ -1183,10 +1189,11 @@ function netProduceInput(forTick) {
   if (keys.has('KeyW') || keys.has('ArrowUp')) d -= 1;
   if (keys.has('KeyS') || keys.has('ArrowDown')) d += 1;
   NET.myUT = clamp(NET.myUT + d * sp * dt, 0, 1);
-  // global movement recaptures solo offsets (sender-side, so lockstep peers agree)
-  const dGlob = Math.abs(NET.myUT - (NET.myUTPrev ?? NET.myUT));
-  NET.myUTPrev = NET.myUT;
-  if (dGlob > 1e-6) NET.myOff = NET.myOff.map((v) => shrink(v, dGlob * OFF_RECAPTURE));
+  // ATTEMPTED global movement recaptures solo offsets, even against the rails
+  // (sender-side, so lockstep peers agree)
+  let intent = (NET.myIntent || 0) + Math.abs(d * sp * dt);
+  NET.myIntent = 0;
+  if (intent > 1e-6) NET.myOff = NET.myOff.map((v) => shrink(v, intent * OFF_RECAPTURE));
   const msg = {
     t: forTick,
     u: Math.round(NET.myUT * 1000),
@@ -1516,8 +1523,13 @@ cv.addEventListener('pointermove', (e) => {
   const dy = e.clientY - s.y, dx = e.clientX - s.x;
   const dt = Math.max(1, now - s.t);
   const du = (dy * (CH / r.height)) / (FH * 0.55);
-  if (mode === 'net') NET.myUT = clamp(NET.myUT + du, 0, 1);
-  else players[s.side].uT = clamp(players[s.side].uT + du, 0, 1);
+  if (mode === 'net') {
+    NET.myUT = clamp(NET.myUT + du, 0, 1);
+    NET.myIntent = (NET.myIntent || 0) + Math.abs(du);
+  } else {
+    players[s.side].uT = clamp(players[s.side].uT + du, 0, 1);
+    players[s.side].uIntent = (players[s.side].uIntent || 0) + Math.abs(du);
+  }
   const v = (dx * (CW / r.width)) / dt * 1000;
   s.flickV = s.flickV * 0.6 + v * 0.4;
   if (Math.abs(e.clientX - s.downX) + Math.abs(e.clientY - s.downY) > 14) s.moved = true;
