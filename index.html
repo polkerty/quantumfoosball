@@ -114,7 +114,7 @@
       <button id="btnCancel">CANCEL</button>
     </div>
     <div class="help">
-      <b>The ball:</b> a complex wavefunction under the Schrödinger equation.<br>
+      The ball is a complex wavefunction under the Schrödinger equation.<br>
       <b>House rules:</b> herd ≥50% of the ball's probability into the far goal. First to 5.<br>
       <b>Move:</b> W/S or ↑/↓ &nbsp;·&nbsp; <b>Kick:</b> D / → / Space forward · A / ← back<br>
       <b>Solo rod:</b> scroll up/down while hovering over one of your rods to move it alone<br>
@@ -1060,7 +1060,7 @@ function kick(pIdx, dir) {
 // for tick T+NET_DELAY and only advances tick T once both inputs for T exist,
 // so both machines run the identical simulation from a shared seed.
 const PROTO = 2; // lockstep protocol version — bump on any input-schema or sim change
-const BUILD = 'r10'; // bump each deploy — shown on the menu so mismatched windows are obvious
+const BUILD = 'r11'; // bump each deploy — shown on the menu so mismatched windows are obvious
 const NET = {
   phase: 'off', // 'off' | 'lobby' | 'play'
   room: null, partner: null, isHost: false, myIdx: 0,
