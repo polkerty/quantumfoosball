@@ -98,11 +98,9 @@
       <b>House rules:</b> herd ≥50% of the ball's probability into the far goal. First to 5.<br>
       <b>Move:</b> W/S or ↑/↓ &nbsp;·&nbsp; <b>Kick:</b> D / → / Space forward · A / ← back<br>
       <b>Touch:</b> drag to move rods · flick sideways or tap to kick<br>
-      You play <b class="p1">Red</b> against the bot; in the lobby you may draw <b class="p1">Red</b> or <b class="p2">Blue</b>.<br>
-      <b>The ball:</b> a complex wavefunction under the Schrödinger equation. Kicks boost only
-      the probability actually at your feet; the ball disperses, diffracts around players,
-      interferes with itself, and tunnels through thin defenses. Online matches run the same
-      table in deterministic lockstep on both machines — only inputs cross the wire, peer-to-peer.
+      You play <b class="p1">Red</b> against the bot; in the lobby you may draw <b class="p1">Red</b> or
+      <b class="p2">Blue</b> — either way, you defend the left goal and attack to your right.<br>
+      <b>The ball:</b> a complex wavefunction under the Schrödinger equation.
     </div>
   </div>
 </div>
@@ -1111,7 +1109,7 @@ function beginMatch(partnerId, isHost, seed) {
   serve();
   state = 'play';
   const me = players[NET.myIdx];
-  banner = { text: 'MATCH FOUND — YOU ARE ' + me.name, sub: me.dir > 0 ? 'you attack RIGHT →' : '← you attack LEFT', color: me.color, tag: 'start' };
+  banner = { text: 'MATCH FOUND — YOU ARE ' + me.name, sub: 'you attack RIGHT →', color: me.color, tag: 'start' };
   setTimeout(() => { if (banner && banner.tag === 'start') banner = null; }, 2600);
   document.getElementById('menu').style.display = 'none';
   document.getElementById('menuBtn').style.display = 'block';
@@ -1448,8 +1446,10 @@ cv.addEventListener('pointermove', (e) => {
   s.flickV = s.flickV * 0.6 + v * 0.4;
   if (Math.abs(e.clientX - s.downX) + Math.abs(e.clientY - s.downY) > 14) s.moved = true;
   if (Math.abs(s.flickV) > 1300) {
-    if (mode === 'net') requestKick(s.flickV > 0 ? 1 : -1);
-    else kick(s.side, s.flickV > 0 ? 1 : -1);
+    let dir = s.flickV > 0 ? 1 : -1;
+    if (isMirrored()) dir = -dir; // flick is in view coords; sim is mirrored
+    if (mode === 'net') requestKick(dir);
+    else kick(s.side, dir);
     s.flickV = 0;
   }
   s.x = e.clientX; s.y = e.clientY; s.t = now;
@@ -1534,10 +1534,17 @@ function rodAlignU(rod, y) {
 }
 
 // ============================== RENDER =====================================
+// When dealt Blue online, the whole table renders mirrored so every player
+// attacks to their visual right. Pure presentation — sim coords are shared.
+const isMirrored = () => mode === 'net' && NET.myIdx === 1;
+
 function render() {
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const mir = isMirrored();
+  if (mir) ctx.setTransform(-1, 0, 0, 1, cv.width, 0);
+  else ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(bg, 0, 0);
   ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+  if (mir) { ctx.translate(2 * FX + FW, 0); ctx.scale(-1, 1); } // field-space flip
 
   renderField();
 
@@ -1583,7 +1590,8 @@ function render() {
     }
   }
 
-  drawHUD(gy);
+  ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0); // text is never mirrored
+  drawHUD(gy, mir);
   if (banner) drawBanner();
   if (mode === 'net' && state === 'play' && NET.stallT > 0.5) {
     ctx.font = '700 14px ' + FONT_D;
@@ -1593,16 +1601,19 @@ function render() {
   }
 }
 
-function drawHUD(gy) {
+function drawHUD(gy, mir) {
+  // visual-left team: whoever defends the viewer's left goal
+  const L = mir ? players[1] : players[0];
+  const R = mir ? players[0] : players[1];
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   // painted scoreboard numerals on the paper margin
   ctx.font = '700 38px ' + FONT_D;
-  ctx.fillStyle = players[0].color; ctx.fillText(String(players[0].score), FX + 40, 36);
-  ctx.fillStyle = players[1].color; ctx.fillText(String(players[1].score), FX + FW - 40, 36);
+  ctx.fillStyle = L.color; ctx.fillText(String(L.score), FX + 40, 36);
+  ctx.fillStyle = R.color; ctx.fillText(String(R.score), FX + FW - 40, 36);
   ctx.font = '700 14px ' + FONT_D;
-  const meTag = (i) => mode === 'net' && NET.myIdx === i ? ' · YOU' : '';
-  ctx.fillStyle = players[0].color; ctx.fillText('RED' + meTag(0), FX + 122, 38);
-  ctx.fillStyle = players[1].color; ctx.fillText('BLUE' + meTag(1), FX + FW - 122, 38);
+  const meTag = (p) => mode === 'net' && players[NET.myIdx] === p ? ' · YOU' : '';
+  ctx.fillStyle = L.color; ctx.fillText(L.name + meTag(L), FX + 122, 38);
+  ctx.fillStyle = R.color; ctx.fillText(R.name + meTag(R), FX + FW - 122, 38);
   ctx.font = '700 19px ' + FONT_D;
   ctx.fillStyle = INK;
   ctx.fillText('Q U A N T U M   F O O S B A L L', CW / 2, 28);
@@ -1613,8 +1624,9 @@ function drawHUD(gy) {
 
   // probability gauges beside each goal (thermometer to the 50% mark)
   for (const side of [-1, 1]) {
-    const mass = side < 0 ? goalL : goalR;
-    const benef = side < 0 ? players[1] : players[0];
+    const simSide = mir ? -side : side; // mirrored view swaps which sim goal sits on each edge
+    const mass = simSide < 0 ? goalL : goalR;
+    const benef = simSide < 0 ? players[1] : players[0];
     const mx = side < 0 ? 26 : CW - 42;
     const mh = GH, my0 = gy - mh / 2;
     ctx.fillStyle = 'rgba(255,250,238,0.75)';
