@@ -133,7 +133,7 @@ const CFG = {
   APP_ID: 'https://quantumfoosball-4efeb-default-rtdb.firebaseio.com',
 };
 const PAGES_URL = 'https://polkerty.github.io/quantumfoosball/';
-const TRYSTERO_URL = 'https://esm.run/trystero/firebase';
+const TRYSTERO_URL = 'https://esm.run/@trystero-p2p/firebase@0.25.3';
 
 // ==================== DETERMINISTIC MATH (for lockstep) ====================
 // JS guarantees bit-identical IEEE-754 +,-,*,/,%,sqrt across engines, but NOT
@@ -567,11 +567,13 @@ async function goOnline() {
   if (!TRY) {
     try { TRY = await import(TRYSTERO_URL); }
     catch (err) {
+      console.error('P2P module import failed:', err);
       setLobby('');
       const el = document.getElementById('menuMsg');
-      el.textContent = PAGES_URL.startsWith('http')
-        ? 'ONLINE PLAY NEEDS THE WEB BUILD → ' + PAGES_URL.replace(/^https?:\/\//, '')
-        : 'COULD NOT LOAD P2P MODULE (offline? blocked?)';
+      const onWebBuild = location.href.startsWith(PAGES_URL);
+      el.textContent = onWebBuild || !PAGES_URL.startsWith('http')
+        ? 'P2P MODULE FAILED TO LOAD — CHECK CONNECTION AND RETRY'
+        : 'ONLINE PLAY NEEDS THE WEB BUILD → ' + PAGES_URL.replace(/^https?:\/\//, '');
       return;
     }
   }
