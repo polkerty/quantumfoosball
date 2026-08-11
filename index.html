@@ -127,10 +127,13 @@ const CFG = {
   WIN_SCORE: 5,
   BOT: { speed: 1.35, react: 0.09, noise: 16, kickMass: 0.015 },
   NET_GRID: 256,           // common grid width for online matches (both machines must agree)
-  APP_ID: 'foosenball-v1',
+  // Trystero firebase strategy: appId is the Realtime Database URL; rendezvous
+  // lives under its /__trystero__ path (rules lock everything else). Gameplay
+  // is still direct P2P WebRTC — Firebase only carries the handshake.
+  APP_ID: 'https://quantumfoosball-4efeb-default-rtdb.firebaseio.com',
 };
 const PAGES_URL = 'https://polkerty.github.io/quantumfoosball/';
-const TRYSTERO_URL = 'https://esm.run/trystero/nostr';
+const TRYSTERO_URL = 'https://esm.run/trystero/firebase';
 
 // ==================== DETERMINISTIC MATH (for lockstep) ====================
 // JS guarantees bit-identical IEEE-754 +,-,*,/,%,sqrt across engines, but NOT
