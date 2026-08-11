@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Foosenball</title>
+<style>
+  /* Mid-century sports-program: paper, walnut, letterpress ink, one vermillion accent */
+  :root {
+    color-scheme: light;
+    --paper: #e8dec6; --card: #f3ecd9; --ink: #241c12; --ink-soft: #6d5c42;
+    --verm: #c23e21; --red: #c6362c; --blue: #2b4b9b;
+    --display: Futura, "Century Gothic", "Trebuchet MS", Verdana, sans-serif;
+    --body: "Avenir Next", Avenir, Helvetica, Arial, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+  }
+  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  canvas#cv { display: block; touch-action: none; }
+
+  #menu {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(232, 222, 198, 0.88); backdrop-filter: blur(5px); z-index: 10;
+  }
+  #menu .card {
+    text-align: center; padding: 36px 42px 30px; max-width: 640px; width: calc(100% - 32px);
+    border: 2px solid var(--ink); border-radius: 2px;
+    background: var(--card);
+    box-shadow: 7px 7px 0 rgba(36, 28, 18, 0.22);
+  }
+  #menu h1 {
+    font-family: var(--display);
+    font-size: clamp(28px, 6vw, 46px); font-weight: 700; letter-spacing: 0.14em;
+    color: var(--ink); line-height: 1;
+  }
+  #menu h1 em { font-style: normal; color: var(--verm); }
+  #menu .rule { height: 2px; background: var(--ink); margin: 14px auto 0; width: 120px; }
+  #menu .tag {
+    margin-top: 12px; font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  #menu .msg { min-height: 22px; margin-top: 14px; font-size: 14px; font-weight: 600; color: var(--verm); letter-spacing: 0.06em; }
+  #menu .btns { display: flex; gap: 12px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
+  #menu button {
+    font-family: var(--display); font-size: 14px; font-weight: 700; letter-spacing: 0.12em; cursor: pointer;
+    padding: 14px 20px; min-width: 180px; border-radius: 2px;
+    color: var(--ink); background: transparent; border: 2px solid var(--ink);
+    transition: background 0.12s, color 0.12s;
+  }
+  #menu button:hover, #menu button:focus-visible { background: var(--ink); color: var(--card); outline: none; }
+  #menu button.online { border-color: var(--verm); color: var(--verm); }
+  #menu button.online:hover, #menu button.online:focus-visible { background: var(--verm); color: var(--card); }
+  #lobby { display: none; margin-top: 18px; }
+  #lobby .status { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; color: var(--verm); min-height: 44px; line-height: 1.7; white-space: pre-line; }
+  #lobby .pulse { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
+  #lobby button { margin-top: 12px; min-width: 130px; padding: 10px 16px; font-size: 12px; }
+  #menu .help { margin-top: 22px; font-size: 12px; line-height: 1.85; color: var(--ink-soft); text-align: left; border-top: 1px solid rgba(36,28,18,0.25); padding-top: 14px; }
+  #menu .help b { color: var(--ink); font-weight: 600; }
+  #menu .help .p1 { color: var(--red); font-weight: 600; } #menu .help .p2 { color: var(--blue); font-weight: 600; }
+
+  #menuBtn {
+    position: fixed; top: 10px; right: 12px; z-index: 5; display: none;
+    font-family: var(--display); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; cursor: pointer;
+    padding: 7px 12px; border-radius: 2px; color: var(--ink);
+    background: rgba(243, 236, 217, 0.85); border: 2px solid var(--ink);
+  }
+  @media (prefers-reduced-motion: reduce) { #menu button { transition: none; } #lobby .pulse { animation: none; } }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="cv"></canvas></div>
+
+<div id="menu">
+  <div class="card">
+    <h1>FOOSEN<em>BALL</em></h1>
+    <div class="rule"></div>
+    <div class="tag">Regulation table · Nonregulation ball</div>
+    <div class="msg" id="menuMsg"></div>
+    <div class="btns" id="menuBtns">
+      <button id="btn1p">1P · VS THE HOUSE</button>
+      <button id="btn2p">2P · SAME TABLE</button>
+      <button id="btnNet" class="online">OPEN CHALLENGE · ONLINE</button>
+    </div>
+    <div id="lobby">
+      <div class="status pulse" id="lobbyStatus">CONNECTING…</div>
+      <button id="btnCancel">CANCEL</button>
+    </div>
+    <div class="help">
+      <b>House rules:</b> herd ≥50% of the ball's probability into the far goal. First to 5.<br>
+      <b class="p1">Red (left)</b> — <b>W/S</b> move rods · <b>D</b> kick forward · <b>A</b> kick back<br>
+      <b class="p2">Blue (right)</b> — <b>↑/↓</b> move rods · <b>←</b> kick forward · <b>→</b> kick back<br>
+      <b>Online:</b> W/S or ↑/↓ move · D/→/Space kick forward · A/← kick back (you may draw either color)<br>
+      <b>Touch:</b> drag your half to move rods · flick sideways or tap to kick<br>
+      <b>The ball:</b> a complex wavefunction under the Schrödinger equation. Kicks boost only
+      the probability actually at your feet; the ball disperses, diffracts around players,
+      interferes with itself, and tunnels through thin defenses. Online matches run the same
+      table in deterministic lockstep on both machines — only inputs cross the wire, peer-to-peer.
+    </div>
+  </div>
+</div>
+<button id="menuBtn">MENU</button>
+
+<script>
+'use strict';
+// ============================== CONFIG =====================================
+const CFG = {
+  HB: 900,                 // hbar/m — sets dispersion & how "quantum" the wave feels
+  DT_BASE: 1 / 120,        // simulation substep (s); local play may degrade to 1/60 if slow
+  TICK: 1 / 60,            // game logic tick (input, scoring); online lockstep quantum
+  NET_DELAY: 4,            // input delay in ticks for online play (~67ms)
+  SPECTRAL_DAMP: 40,       // damping of near-Nyquist momenta (drag on the fastest components)
+  KICK_FRAC: 0.52,         // kick momentum as a fraction of the grid's max clean momentum
+  KICK_SPREAD: 0.7,        // strike angle vs position on the foot (radians)
+  KICK_REACH: 58, KICK_DUR: 0.26, KICK_CD: 0.34,
+  GOAL_FRACTION: 0.5,      // probability needed in a goal to score
+  COLLAPSE_FIELD: 0.12,    // field mass below this => wavefunction collapse
+  WIN_SCORE: 5,
+  BOT: { speed: 1.35, react: 0.09, noise: 16, kickMass: 0.015 },
+  NET_GRID: 256,           // common grid width for online matches (both machines must agree)
+  APP_ID: 'foosenball-v1',
+};
+const PAGES_URL = '__PAGES_URL__'; // filled in at deploy time
+const TRYSTERO_URL = 'https://esm.run/trystero/nostr';
+
+// ==================== DETERMINISTIC MATH (for lockstep) ====================
+// JS guarantees bit-identical IEEE-754 +,-,*,/,%,sqrt across engines, but NOT
+// sin/cos/exp. Everything that touches simulation state uses these instead.
+const D_PI = Math.PI, D_2PI = 2 * Math.PI, D_HPI = Math.PI / 2;
+function dsin(x) {
+  x = x % D_2PI;
+  if (x > D_PI) x -= D_2PI; else if (x < -D_PI) x += D_2PI;
+  if (x > D_HPI) x = D_PI - x; else if (x < -D_HPI) x = -D_PI - x;
+  const z = x * x;
+  return x * (1 - z / 6 * (1 - z / 20 * (1 - z / 42 * (1 - z / 72 * (1 - z / 110 * (1 - z / 156))))));
+}
+function dcos(x) { return dsin(x + D_HPI); }
+function dexp(x) {
+  if (x < -700) return 0;
+  const LN2 = 0.6931471805599453;
+  const k = Math.round(x / LN2);
+  const r = x - k * LN2;
+  const s = 1 + r * (1 + r / 2 * (1 + r / 3 * (1 + r / 4 * (1 + r / 5 * (1 + r / 6 * (1 + r / 7 * (1 + r / 8)))))));
+  let p = 1, b = 2, n = k < 0 ? -k : k;
+  while (n > 0) { if (n & 1) p *= b; b *= b; n >>= 1; }
+  return k < 0 ? s / p : s * p;
+}
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+let rng = mulberry32((Date.now() & 0xffffffff) >>> 0);
+
+// ============================== GEOMETRY ===================================
+const CW = 1280, CH = 820;                    // logical canvas size
+const FX = 80, FY = 76, FW = 1120, FH = 700;  // playfield rect (wave space: 0..FW, 0..FH)
+const GH = 230;                               // goal mouth height, centered vertically
+const MAN_W = 18, MAN_H = 44;
+const SPACING = { 2: 330, 3: 215, 5: 140 };
+
+const RODS = [];
+{
+  const counts = [3, 2, 3, 5, 5, 3, 2, 3];
+  const owners = [0, 0, 1, 0, 1, 0, 1, 1]; // 0 = crimson/left, 1 = amber/right
+  for (let i = 0; i < 8; i++) {
+    const n = counts[i], sp = SPACING[n];
+    const span = (n - 1) * sp + MAN_H;
+    RODS.push({ x: FW * (i + 0.5) / 8, n, sp, span, travel: FH - span, owner: owners[i], top: 0, vy: 0 });
+  }
+}
+
+const players = [
+  { u: 0.5, uT: 0.5, kick: null, cd: 0, score: 0, dir: +1, color: '#c6362c', glow: 'rgba(198,54,44,', name: 'RED' },
+  { u: 0.5, uT: 0.5, kick: null, cd: 0, score: 0, dir: -1, color: '#2b4b9b', glow: 'rgba(43,75,155,', name: 'BLUE' },
+];
+const FONT_D = 'Futura, "Century Gothic", "Trebuchet MS", Verdana, sans-serif';
+const INK = '#241c12', INK_SOFT = 'rgba(70,52,30,';
+
+let mode = '1p';            // '1p' | '2p' | 'net'
+let state = 'menu';         // 'menu' | 'play' | 'pause' | 'over'
+let goalL = 0, goalR = 0;   // probability collected this play
+let pauseT = 0, serveT = 0;
+let banner = null;
+
+const bot = { t: 0, target: 0.5 };
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const pct = (v) => Math.round(v * 100);
+
+// ====================== QUANTUM FIELD (split-step FFT) =====================
+const IS_COARSE = matchMedia('(pointer:coarse)').matches || innerWidth < 900;
+const LOCAL_NX = IS_COARSE ? 256 : 512; // play is mostly along x, so x gets the resolution
+
+// grid state — rebuilt by initGrid() (online matches force a common grid)
+let NX, NY, NC, CX, CY, KXMAX, KYMAX, KICK_V, KYCAP, G0, G1;
+let re, im, dens, KR, KI, T_X, T_Y, colR, colI;
+const WALLX = 4, WALLY = 2; // wall thickness in cells (mirror boundary)
+let DT = CFG.DT_BASE;
+let rawSumRatio = 1;
+let expo = 0;
+
+function makeFFT(n) {
+  const rev = new Uint32Array(n);
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    rev[i] = j;
+  }
+  const cosT = new Float32Array(n / 2), sinT = new Float32Array(n / 2);
+  for (let i = 0; i < n / 2; i++) {
+    cosT[i] = dcos(-D_2PI * i / n);
+    sinT[i] = dsin(-D_2PI * i / n);
+  }
+  return { n, rev, cosT, sinT };
+}
+
+function buildK(dt) {
+  const dkx = D_2PI / (NX * CX), dky = D_2PI / (NY * CY);
+  for (let y = 0; y < NY; y++) {
+    const ky = (y < NY / 2 ? y : y - NY) * dky;
+    for (let x = 0; x < NX; x++) {
+      const kx = (x < NX / 2 ? x : x - NX) * dkx;
+      const th = -CFG.HB * (kx * kx + ky * ky) * dt / 2;
+      const ax = kx < 0 ? -kx : kx, ay = ky < 0 ? -ky : ky;
+      const s = Math.max(ax / KXMAX, ay / KYMAX);
+      let g = 1;
+      if (s > 0.7) { const u = (s - 0.7) / 0.3; g = dexp(-CFG.SPECTRAL_DAMP * u * u * dt); }
+      const sc = g / NC;
+      const i = y * NX + x;
+      KR[i] = dcos(th) * sc;
+      KI[i] = dsin(th) * sc;
+    }
+  }
+}
+
+function initGrid(nx, ny) {
+  NX = nx; NY = ny; NC = nx * ny;
+  CX = FW / NX; CY = FH / NY;
+  KXMAX = D_PI / CX; KYMAX = D_PI / CY;
+  KICK_V = CFG.KICK_FRAC * KXMAX * CFG.HB;
+  KYCAP = 0.62 * KYMAX;
+  G0 = Math.round((FH / 2 - GH / 2) / CY);
+  G1 = Math.round((FH / 2 + GH / 2) / CY) - 1;
+  re = new Float32Array(NC); im = new Float32Array(NC);
+  dens = new Float32Array(NC);
+  KR = new Float32Array(NC); KI = new Float32Array(NC);
+  T_X = makeFFT(NX); T_Y = makeFFT(NY);
+  colR = new Float32Array(NY); colI = new Float32Array(NY);
+  buildK(DT);
+  if (typeof gridCv !== 'undefined') {
+    gridCv.width = NX; gridCv.height = NY;
+    imgData = gridCtx.createImageData(NX, NY);
+  }
+  expo = 0;
+}
+
+function fftc(ar, ai, off, T, inv) {
+  const { n, rev, cosT, sinT } = T;
+  for (let i = 0; i < n; i++) {
+    const j = rev[i];
+    if (j > i) {
+      const a = off + i, b = off + j;
+      let t = ar[a]; ar[a] = ar[b]; ar[b] = t;
+      t = ai[a]; ai[a] = ai[b]; ai[b] = t;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const half = len >> 1, step = n / len;
+    for (let i = 0; i < n; i += len) {
+      for (let j = 0; j < half; j++) {
+        const wr = cosT[j * step];
+        const wi = inv ? -sinT[j * step] : sinT[j * step];
+        const a = off + i + j, b = a + half;
+        const xr = ar[b] * wr - ai[b] * wi;
+        const xi = ar[b] * wi + ai[b] * wr;
+        ar[b] = ar[a] - xr; ai[b] = ai[a] - xi;
+        ar[a] += xr; ai[a] += xi;
+      }
+    }
+  }
+}
+
+function fft2d(inv) {
+  for (let y = 0; y < NY; y++) fftc(re, im, y * NX, T_X, inv);
+  for (let x = 0; x < NX; x++) {
+    for (let y = 0; y < NY; y++) { const i = y * NX + x; colR[y] = re[i]; colI[y] = im[i]; }
+    fftc(colR, colI, 0, T_Y, inv);
+    for (let y = 0; y < NY; y++) { const i = y * NX + x; re[i] = colR[y]; im[i] = colI[y]; }
+  }
+}
+
+// Hard boundaries via method of images: amplitude that penetrated a wall or a
+// foosman is mirrored back across the nearest face with a sign flip. Goal
+// mouths absorb instead — they're detectors.
+function boundaries() {
+  for (let iy = 0; iy < NY; iy++) {
+    const inMouth = iy >= G0 && iy <= G1;
+    const row = iy * NX;
+    for (let ix = 0; ix < WALLX; ix++) {
+      let i = row + ix; // left edge
+      let a = re[i], b = im[i];
+      if (a !== 0 || b !== 0) {
+        if (inMouth) goalL += a * a + b * b;
+        else { const t = row + (2 * WALLX - 1 - ix); re[t] -= a; im[t] -= b; }
+        re[i] = 0; im[i] = 0;
+      }
+      i = row + (NX - 1 - ix); // right edge
+      a = re[i]; b = im[i];
+      if (a !== 0 || b !== 0) {
+        if (inMouth) goalR += a * a + b * b;
+        else { const t = row + (NX - 2 * WALLX + ix); re[t] -= a; im[t] -= b; }
+        re[i] = 0; im[i] = 0;
+      }
+    }
+  }
+  for (let ix = WALLX; ix < NX - WALLX; ix++) {
+    for (let iy = 0; iy < WALLY; iy++) {
+      let i = iy * NX + ix; // top edge
+      let a = re[i], b = im[i];
+      if (a !== 0 || b !== 0) {
+        const t = (2 * WALLY - 1 - iy) * NX + ix;
+        re[t] -= a; im[t] -= b; re[i] = 0; im[i] = 0;
+      }
+      i = (NY - 1 - iy) * NX + ix; // bottom edge
+      a = re[i]; b = im[i];
+      if (a !== 0 || b !== 0) {
+        const t = (NY - 2 * WALLY + iy) * NX + ix;
+        re[t] -= a; im[t] -= b; re[i] = 0; im[i] = 0;
+      }
+    }
+  }
+  for (const rod of RODS) {
+    if (players[rod.owner].kick) continue; // feet up while kicking
+    const c0 = Math.max(WALLX, Math.round((rod.x - MAN_W / 2) / CX));
+    const c1 = Math.min(NX - 1 - WALLX, Math.round((rod.x + MAN_W / 2) / CX) - 1);
+    if (c1 < c0) continue;
+    for (let k = 0; k < rod.n; k++) {
+      const my = rod.top + MAN_H / 2 + k * rod.sp;
+      const r0 = Math.max(WALLY, Math.round((my - MAN_H / 2) / CY));
+      const r1 = Math.min(NY - 1 - WALLY, Math.round((my + MAN_H / 2) / CY) - 1);
+      for (let iy = r0; iy <= r1; iy++) {
+        const dyt = iy - r0, dyb = r1 - iy;
+        const row = iy * NX;
+        for (let ix = c0; ix <= c1; ix++) {
+          const i = row + ix;
+          const a = re[i], b = im[i];
+          if (a === 0 && b === 0) continue;
+          const dxl = ix - c0, dxr = c1 - ix;
+          const m = Math.min(dxl, dxr, dyt, dyb);
+          let tx = ix, ty = iy;
+          if (m === dxl) tx = 2 * c0 - 1 - ix;
+          else if (m === dxr) tx = 2 * c1 + 1 - ix;
+          else if (m === dyt) ty = 2 * r0 - 1 - iy;
+          else ty = 2 * r1 + 1 - iy;
+          if (tx >= WALLX && tx < NX - WALLX && ty >= WALLY && ty < NY - WALLY) {
+            const t = ty * NX + tx;
+            re[t] -= a; im[t] -= b;
+          }
+          re[i] = 0; im[i] = 0;
+        }
+      }
+    }
+  }
+}
+
+function stepField() {
+  fft2d(false);
+  for (let i = 0; i < NC; i++) {
+    const a = re[i], b = im[i];
+    re[i] = a * KR[i] - b * KI[i];
+    im[i] = a * KI[i] + b * KR[i];
+  }
+  fft2d(true);
+  boundaries();
+}
+
+// A kick multiplies the wave by exp(i k·x) in the strike zone: a momentum
+// boost applied only to the probability that was actually in front of the
+// feet, with direction varying across the foot (angle of the strike).
+function applyStrike(pIdx, dir) {
+  const kmag = KICK_V / CFG.HB;
+  for (const rod of RODS) {
+    if (rod.owner !== pIdx) continue;
+    const xa = dir > 0 ? rod.x - 10 : rod.x - CFG.KICK_REACH;
+    const xb = dir > 0 ? rod.x + CFG.KICK_REACH : rod.x + 10;
+    const c0 = Math.max(0, Math.floor(xa / CX));
+    const c1 = Math.min(NX - 1, Math.ceil(xb / CX));
+    const brush = clamp(rod.vy, -400, 400) / CFG.HB * 0.6;
+    for (let k = 0; k < rod.n; k++) {
+      const my = rod.top + MAN_H / 2 + k * rod.sp;
+      const band = MAN_H * 0.8;
+      const r0 = Math.max(0, Math.floor((my - band) / CY));
+      const r1 = Math.min(NY - 1, Math.ceil((my + band) / CY));
+      for (let iy = r0; iy <= r1; iy++) {
+        const y = (iy + 0.5) * CY;
+        const rel = (y - my) / band;
+        if (rel < -1 || rel > 1) continue;
+        const ang = rel * CFG.KICK_SPREAD;
+        const kx = dir * kmag * dcos(ang);
+        const ky = clamp(kmag * dsin(ang) + brush, -KYCAP, KYCAP);
+        const row = iy * NX;
+        for (let ix = c0; ix <= c1; ix++) {
+          const i = row + ix;
+          const a = re[i], b = im[i];
+          if (a === 0 && b === 0) continue;
+          const ph = kx * ((ix + 0.5) * CX - rod.x) + ky * (y - my);
+          const cr = dcos(ph), ci = dsin(ph);
+          re[i] = a * cr - b * ci;
+          im[i] = a * ci + b * cr;
+        }
+      }
+    }
+  }
+}
+
+function serve() {
+  const sx = NX >= 512 ? 42 : 48, sy = FH * 0.32;
+  const cx = FW / 2, cy = FH / 2;
+  const kx0 = (rng() - 0.5) * 0.06, ky0 = (rng() - 0.5) * 0.06;
+  let sum = 0;
+  for (let iy = 0; iy < NY; iy++) {
+    const y = (iy + 0.5) * CY;
+    const gy = dexp(-((y - cy) * (y - cy)) / (4 * sy * sy));
+    for (let ix = 0; ix < NX; ix++) {
+      const x = (ix + 0.5) * CX;
+      const a = gy * dexp(-((x - cx) * (x - cx)) / (4 * sx * sx));
+      const ph = kx0 * x + ky0 * y;
+      const i = iy * NX + ix;
+      re[i] = a * dcos(ph);
+      im[i] = a * dsin(ph);
+      sum += a * a;
+    }
+  }
+  const s = 1 / Math.sqrt(sum);
+  for (let i = 0; i < NC; i++) { re[i] *= s; im[i] *= s; }
+  goalL = 0; goalR = 0; serveT = 0;
+}
+
+// Renormalization is part of the SIMULATION (field + goals = 1 always) and
+// must run per tick — never per frame — so lockstep peers stay bit-identical.
+function renormalize() {
+  let sum = 0;
+  for (let i = 0; i < NC; i++) sum += re[i] * re[i] + im[i] * im[i];
+  goalL = clamp(goalL, 0, 1); goalR = clamp(goalR, 0, 1);
+  const target = Math.max(1e-9, 1 - goalL - goalR);
+  if (sum > 1e-12) {
+    rawSumRatio = sum / target;
+    const s2 = target / sum;
+    if (Math.abs(s2 - 1) > 0.002) {
+      const s = Math.sqrt(s2);
+      for (let i = 0; i < NC; i++) { re[i] *= s; im[i] *= s; }
+    }
+  }
+}
+
+// Render-only: computes density + exposure, never mutates the wavefunction.
+function densityPass() {
+  let maxd = 0;
+  for (let i = 0; i < NC; i++) {
+    const d = re[i] * re[i] + im[i] * im[i];
+    dens[i] = d;
+    if (d > maxd) maxd = d;
+  }
+  expo = Math.max(maxd, expo * 0.985, 1e-12);
+}
+
+function stateHash() {
+  let h = goalL * 3 + goalR * 7 + players[0].u - players[1].u;
+  for (let i = 0; i < NC; i += 101) h += re[i] - im[i];
+  return h;
+}
+
+// ============================== TICK LOGIC =================================
+// All game state advances in fixed TICK steps so online lockstep is exact.
+function tickSim() {
+  const dt = CFG.TICK;
+  if (mode !== 'net' && state === 'play') {
+    const sp = 2.4;
+    if (keys.has('KeyW')) players[0].uT = clamp(players[0].uT - sp * dt, 0, 1);
+    if (keys.has('KeyS')) players[0].uT = clamp(players[0].uT + sp * dt, 0, 1);
+    if (mode === '2p') {
+      if (keys.has('ArrowUp')) players[1].uT = clamp(players[1].uT - sp * dt, 0, 1);
+      if (keys.has('ArrowDown')) players[1].uT = clamp(players[1].uT + sp * dt, 0, 1);
+    } else {
+      if (keys.has('ArrowUp')) players[0].uT = clamp(players[0].uT - sp * dt, 0, 1);
+      if (keys.has('ArrowDown')) players[0].uT = clamp(players[0].uT + sp * dt, 0, 1);
+      botUpdate(dt);
+    }
+  }
+  for (const p of players) {
+    p.cd -= dt;
+    if (p.kick) { p.kick.t += dt; if (p.kick.t >= CFG.KICK_DUR) p.kick = null; }
+    p.u += (p.uT - p.u) * Math.min(1, 18 * dt);
+  }
+  for (const rod of RODS) {
+    const top = players[rod.owner].u * rod.travel;
+    rod.vy = (top - rod.top) / dt;
+    rod.top = top;
+  }
+  const steps = DT < 1 / 100 ? 2 : 1;
+  for (let s = 0; s < steps; s++) stepField();
+  renormalize();
+  scoringTick(dt);
+}
+
+function scoringTick(dt) {
+  if (state === 'play') {
+    serveT += dt;
+    if (goalL >= CFG.GOAL_FRACTION) point(1, 'goal');
+    else if (goalR >= CFG.GOAL_FRACTION) point(0, 'goal');
+    else if (serveT > 4 && 1 - goalL - goalR < CFG.COLLAPSE_FIELD) {
+      if (goalL > goalR + 0.01) point(1, 'collapse');
+      else if (goalR > goalL + 0.01) point(0, 'collapse');
+      else reServe('WAVEFUNCTION COLLAPSED');
+    }
+  } else if (state === 'pause') {
+    pauseT -= dt;
+    if (pauseT <= 0) { serve(); state = 'play'; banner = null; }
+  }
+}
+
+function kick(pIdx, dir) {
+  const p = players[pIdx];
+  if ((state !== 'play' && state !== 'pause') || p.cd > 0) return;
+  if (state !== 'play') return;
+  p.cd = CFG.KICK_CD;
+  p.kick = { t: 0, dir };
+  applyStrike(pIdx, dir);
+  sndKick();
+}
+
+// ============================== NETWORK ====================================
+// Delay-based lockstep over a P2P DataChannel. Each side schedules its input
+// for tick T+NET_DELAY and only advances tick T once both inputs for T exist,
+// so both machines run the identical simulation from a shared seed.
+const NET = {
+  phase: 'off', // 'off' | 'lobby' | 'play'
+  room: null, partner: null, isHost: false, myIdx: 0,
+  tick: 0, inQ: [new Map(), new Map()],
+  myUT: 0.5, pendingKicks: [],
+  sums: new Map(), stallT: 0,
+  send: {}, peers: new Set(), busy: new Set(),
+};
+let TRY = null;
+
+async function goOnline() {
+  if (NET.phase !== 'off') return;
+  audioInit();
+  setLobby('CONNECTING TO LOBBY…');
+  if (!TRY) {
+    try { TRY = await import(TRYSTERO_URL); }
+    catch (err) {
+      setLobby('');
+      const el = document.getElementById('menuMsg');
+      el.textContent = PAGES_URL.startsWith('http')
+        ? 'ONLINE PLAY NEEDS THE WEB BUILD → ' + PAGES_URL.replace(/^https?:\/\//, '')
+        : 'COULD NOT LOAD P2P MODULE (offline? blocked?)';
+      return;
+    }
+  }
+  NET.phase = 'lobby';
+  NET.peers.clear(); NET.busy.clear();
+  const room = TRY.joinRoom({ appId: CFG.APP_ID }, 'lobby');
+  NET.room = room;
+  const [sendStart, onStart] = room.makeAction('start');
+  const [sendIn, onIn] = room.makeAction('in');
+  const [sendSum, onSum] = room.makeAction('sum');
+  const [sendBye, onBye] = room.makeAction('bye');
+  const [sendBusy, onBusy] = room.makeAction('busy');
+  NET.send = { start: sendStart, in: sendIn, sum: sendSum, bye: sendBye, busy: sendBusy };
+
+  room.onPeerJoin((id) => {
+    NET.peers.add(id);
+    if (NET.phase === 'play') NET.send.busy({ b: 1 }, id);
+    else tryMatch();
+    updateLobby();
+  });
+  room.onPeerLeave((id) => {
+    NET.peers.delete(id); NET.busy.delete(id);
+    if (NET.partner === id && NET.phase === 'play') endNet('OPPONENT DISCONNECTED');
+    else { tryMatch(); updateLobby(); }
+  });
+  onBusy((d, id) => {
+    if (d.b) NET.busy.add(id); else NET.busy.delete(id);
+    tryMatch(); updateLobby();
+  });
+  onStart((d, id) => {
+    if (NET.phase !== 'lobby') return;
+    beginMatch(id, false, d.seed >>> 0);
+  });
+  onIn((d, id) => {
+    if (NET.phase === 'play' && id === NET.partner) NET.inQ[1 - NET.myIdx].set(d.t, d);
+  });
+  onSum((d, id) => {
+    if (NET.phase !== 'play' || id !== NET.partner) return;
+    const mine = NET.sums.get(d.t);
+    if (mine !== undefined && mine !== d.h) endNet('QUANTUM DESYNC — MATCH VOID');
+  });
+  onBye((d, id) => {
+    if (id === NET.partner && NET.phase === 'play') endNet('OPPONENT LEFT');
+  });
+  updateLobby();
+}
+
+function freeIds() {
+  const ids = [TRY.selfId];
+  for (const p of NET.peers) if (!NET.busy.has(p)) ids.push(p);
+  ids.sort();
+  return ids;
+}
+
+function tryMatch() {
+  if (NET.phase !== 'lobby') return;
+  const ids = freeIds();
+  if (ids.length < 2) return;
+  const [a, b] = ids;
+  if (TRY.selfId === a) {
+    // I'm the host — let connections settle briefly, then start
+    const target = b;
+    setTimeout(() => {
+      if (NET.phase !== 'lobby' || !NET.peers.has(target) || NET.busy.has(target)) return;
+      const ids2 = freeIds();
+      if (ids2[0] !== TRY.selfId || ids2[1] !== target) return;
+      const seed = (Math.random() * 4294967296) >>> 0;
+      NET.send.start({ seed }, target);
+      beginMatch(target, true, seed);
+    }, 500);
+  }
+}
+
+function beginMatch(partnerId, isHost, seed) {
+  NET.partner = partnerId; NET.isHost = isHost;
+  NET.myIdx = isHost ? 0 : 1;
+  NET.phase = 'play';
+  NET.tick = 0; NET.stallT = 0;
+  NET.inQ = [new Map(), new Map()];
+  NET.sums.clear();
+  NET.myUT = 0.5; NET.pendingKicks = [];
+  for (let t = 0; t < CFG.NET_DELAY; t++) {
+    NET.inQ[0].set(t, { t, u: 500, k: [] });
+    NET.inQ[1].set(t, { t, u: 500, k: [] });
+  }
+  NET.send.busy({ b: 1 });
+  DT = CFG.DT_BASE;
+  initGrid(CFG.NET_GRID, 128);
+  rng = mulberry32(seed);
+  mode = 'net';
+  players[0].score = players[1].score = 0;
+  players[0].u = players[0].uT = players[1].u = players[1].uT = 0.5;
+  players[0].kick = players[1].kick = null;
+  players[0].cd = players[1].cd = 0;
+  serve();
+  state = 'play';
+  const me = players[NET.myIdx];
+  banner = { text: 'MATCH FOUND — YOU ARE ' + me.name, sub: me.dir > 0 ? 'you attack RIGHT →' : '← you attack LEFT', color: me.color, tag: 'start' };
+  setTimeout(() => { if (banner && banner.tag === 'start') banner = null; }, 2600);
+  document.getElementById('menu').style.display = 'none';
+  document.getElementById('menuBtn').style.display = 'block';
+  setLobby('');
+}
+
+function netProduceInput(forTick) {
+  const dt = CFG.TICK, sp = 2.4;
+  let d = 0;
+  if (keys.has('KeyW') || keys.has('ArrowUp')) d -= 1;
+  if (keys.has('KeyS') || keys.has('ArrowDown')) d += 1;
+  NET.myUT = clamp(NET.myUT + d * sp * dt, 0, 1);
+  const msg = { t: forTick, u: Math.round(NET.myUT * 1000), k: NET.pendingKicks.splice(0) };
+  NET.inQ[NET.myIdx].set(forTick, msg);
+  NET.send.in(msg, NET.partner);
+}
+
+function netTick() {
+  const t = NET.tick;
+  const a = NET.inQ[0].get(t), b = NET.inQ[1].get(t);
+  if (!a || !b) return false;
+  netProduceInput(t + CFG.NET_DELAY);
+  for (let idx = 0; idx < 2; idx++) {
+    const inp = idx === 0 ? a : b;
+    players[idx].uT = inp.u / 1000;
+    for (const dir of inp.k) kick(idx, dir);
+    NET.inQ[idx].delete(t);
+  }
+  tickSim();
+  if (t % 180 === 0) {
+    const h = stateHash();
+    NET.sums.set(t, h);
+    if (NET.sums.size > 12) NET.sums.delete(NET.sums.keys().next().value);
+    NET.send.sum({ t, h }, NET.partner);
+  }
+  NET.tick++;
+  return true;
+}
+
+function requestKick(dir) {
+  if (mode === 'net') NET.pendingKicks.push(dir);
+}
+
+function endNet(msg) {
+  leaveOnline();
+  toMenu(msg);
+}
+
+function leaveOnline() {
+  if (NET.room) {
+    try {
+      if (NET.partner) NET.send.bye({}, NET.partner);
+      NET.send.busy({ b: 0 });
+      NET.room.leave();
+    } catch (err) {}
+  }
+  NET.room = null; NET.partner = null; NET.phase = 'off';
+  NET.peers.clear(); NET.busy.clear();
+  if (mode === 'net') {
+    mode = '1p';
+    DT = degraded ? 1 / 60 : CFG.DT_BASE;
+    initGrid(LOCAL_NX, 128);
+    serve();
+  }
+  setLobby('');
+}
+
+function setLobby(text) {
+  const lobby = document.getElementById('lobby');
+  const btns = document.getElementById('menuBtns');
+  if (text) {
+    lobby.style.display = 'block'; btns.style.display = 'none';
+    document.getElementById('lobbyStatus').textContent = text;
+  } else {
+    lobby.style.display = 'none'; btns.style.display = 'flex';
+  }
+}
+
+function updateLobby() {
+  if (NET.phase !== 'lobby') return;
+  const free = freeIds().length - 1;
+  const busyN = NET.busy.size;
+  let s = 'WAITING FOR AN OPPONENT…\n';
+  s += (NET.peers.size === 0)
+    ? 'you are the only player online'
+    : free > 0 ? 'opponent found — pairing…'
+    : busyN + ' online, all in matches — you get the next one';
+  document.getElementById('lobbyStatus').textContent = s;
+}
+
+// ============================== CANVAS =====================================
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const SCALE = Math.min(2, window.devicePixelRatio || 1);
+cv.width = CW * SCALE; cv.height = CH * SCALE;
+
+function fit() {
+  const k = Math.min((innerWidth - 4) / CW, (innerHeight - 4) / CH);
+  cv.style.width = (CW * k) + 'px';
+  cv.style.height = (CH * k) + 'px';
+}
+addEventListener('resize', fit); fit();
+
+const gridCv = document.createElement('canvas');
+const gridCtx = gridCv.getContext('2d');
+let imgData = null;
+
+const LUT = new Float32Array(1024);
+for (let i = 0; i < 1024; i++) LUT[i] = 1 - Math.exp(-3.2 * i / 256);
+
+function renderField() {
+  // the wave as indigo ink soaking into the felt: density = coverage,
+  // phase shimmers the hue (de Broglie stripes read as watermark bands)
+  const data = imgData.data;
+  const e = expo > 0 ? 1 / expo : 0;
+  for (let i = 0, j = 0; i < NC; i++, j += 4) {
+    const d = dens[i];
+    const b = d * e;
+    if (b < 4e-4) { data[j + 3] = 0; continue; }
+    let idx = (b * 256) | 0;
+    if (idx > 1023) idx = 1023;
+    const t = LUT[idx];
+    const c = re[i] / Math.sqrt(d); // cos(phase)
+    data[j]     = 40 - 22 * c;
+    data[j + 1] = 54 + 20 * c;
+    data[j + 2] = 132 - 10 * c;
+    data[j + 3] = Math.min(255, t * 280);
+  }
+  gridCtx.putImageData(imgData, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(gridCv, 0, 0, NX, NY, FX, FY, FW, FH);
+}
+
+const bg = document.createElement('canvas');
+bg.width = CW * SCALE; bg.height = CH * SCALE;
+
+function drawTable(c) {
+  c.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+  // paper page with a soft vignette
+  c.fillStyle = '#e8dec6'; c.fillRect(0, 0, CW, CH);
+  const vg = c.createRadialGradient(CW / 2, CH / 2, CH * 0.3, CW / 2, CH / 2, CW * 0.75);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(90,66,38,0.16)');
+  c.fillStyle = vg; c.fillRect(0, 0, CW, CH);
+
+  // walnut cabinet
+  c.fillStyle = '#66452c';
+  roundRect(c, FX - 26, FY - 26, FW + 52, FH + 52, 12); c.fill();
+  c.strokeStyle = 'rgba(38,22,10,0.6)'; c.lineWidth = 2.5;
+  roundRect(c, FX - 26, FY - 26, FW + 52, FH + 52, 12); c.stroke();
+  c.strokeStyle = 'rgba(255,236,200,0.22)'; c.lineWidth = 1.5;
+  roundRect(c, FX - 21, FY - 21, FW + 42, FH + 42, 9); c.stroke();
+  // wood grain streaks
+  for (let i = 0; i < 60; i++) {
+    const yy = FY - 26 + Math.random() * (FH + 52);
+    c.strokeStyle = 'rgba(30,18,8,' + (0.03 + Math.random() * 0.06) + ')';
+    c.lineWidth = 0.8 + Math.random() * 1.4;
+    c.beginPath();
+    c.moveTo(FX - 26, yy);
+    c.bezierCurveTo(FX + FW * 0.3, yy + (Math.random() - 0.5) * 10, FX + FW * 0.7, yy + (Math.random() - 0.5) * 10, FX + FW + 26, yy);
+    c.stroke();
+  }
+
+  // pale felt field
+  const fg = c.createRadialGradient(FX + FW / 2, FY + FH / 2, 80, FX + FW / 2, FY + FH / 2, FW * 0.62);
+  fg.addColorStop(0, '#efe8d2'); fg.addColorStop(1, '#e2d7b8');
+  c.fillStyle = fg; c.fillRect(FX, FY, FW, FH);
+  // paper grain
+  for (let i = 0; i < 5000; i++) {
+    c.fillStyle = 'rgba(80,60,35,' + (0.015 + Math.random() * 0.03) + ')';
+    c.fillRect(FX + Math.random() * FW, FY + Math.random() * FH, 1.1, 1.1);
+  }
+
+  // printed markings
+  c.strokeStyle = 'rgba(70,52,30,0.42)'; c.lineWidth = 2;
+  c.strokeRect(FX + 3, FY + 3, FW - 6, FH - 6);
+  c.beginPath(); c.moveTo(FX + FW / 2, FY); c.lineTo(FX + FW / 2, FY + FH); c.stroke();
+  c.beginPath(); c.arc(FX + FW / 2, FY + FH / 2, 86, 0, Math.PI * 2); c.stroke();
+  c.beginPath(); c.arc(FX + FW / 2, FY + FH / 2, 4, 0, Math.PI * 2);
+  c.fillStyle = 'rgba(70,52,30,0.5)'; c.fill();
+  const gy = FY + FH / 2;
+  c.strokeRect(FX, gy - GH / 2 - 40, 130, GH + 80);
+  c.strokeRect(FX + FW - 130, gy - GH / 2 - 40, 130, GH + 80);
+
+  // goal mouths cut into the cabinet
+  for (const side of [-1, 1]) {
+    const gx = side < 0 ? FX - 26 : FX + FW;
+    c.fillStyle = '#241708';
+    c.fillRect(gx, gy - GH / 2, 26, GH);
+    c.strokeStyle = side < 0 ? 'rgba(43,75,155,0.75)' : 'rgba(198,54,44,0.75)';
+    c.lineWidth = 3;
+    c.strokeRect(gx, gy - GH / 2, 26, GH);
+  }
+
+  // rod handle tabs on the top rail
+  for (const rod of RODS) {
+    c.fillStyle = players[rod.owner].color;
+    roundRect(c, FX + rod.x - 7, FY - 44, 14, 16, 2); c.fill();
+    c.strokeStyle = 'rgba(38,22,10,0.5)'; c.lineWidth = 1; c.stroke();
+  }
+  c.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+function roundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+// ============================== AUDIO ======================================
+let AC = null;
+function audioInit() {
+  if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  if (AC && AC.state === 'suspended') AC.resume();
+}
+function blip(f0, f1, dur, type, gain) {
+  if (!AC) return;
+  const t = AC.currentTime;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t + dur);
+  g.gain.setValueAtTime(gain, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(AC.destination);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+const sndKick = () => blip(190, 80, 0.09, 'square', 0.10);
+const sndGoal = () => { blip(523, 784, 0.28, 'triangle', 0.18); blip(659, 988, 0.34, 'triangle', 0.12); };
+const sndCollapse = () => blip(420, 55, 0.6, 'sawtooth', 0.10);
+
+// ============================== GAME FLOW ==================================
+function startGame(m) {
+  mode = m;
+  DT = degraded ? 1 / 60 : CFG.DT_BASE;
+  if (NX !== LOCAL_NX) initGrid(LOCAL_NX, 128); else buildK(DT);
+  rng = mulberry32((Math.random() * 4294967296) >>> 0);
+  players[0].score = players[1].score = 0;
+  players[0].u = players[0].uT = players[1].u = players[1].uT = 0.5;
+  players[0].kick = players[1].kick = null;
+  players[0].cd = players[1].cd = 0;
+  serve();
+  state = 'play'; banner = null;
+  document.getElementById('menu').style.display = 'none';
+  document.getElementById('menuBtn').style.display = 'block';
+}
+
+function toMenu(msg) {
+  state = 'menu';
+  document.getElementById('menuMsg').textContent = msg || '';
+  document.getElementById('menu').style.display = 'flex';
+  document.getElementById('menuBtn').style.display = 'none';
+}
+
+function point(winner, why) {
+  players[winner].score++;
+  banner = {
+    text: why === 'collapse' ? 'COLLAPSE — ' + players[winner].name + ' SCORES' : 'GOAL — ' + players[winner].name,
+    sub: pct(goalL) + '% left goal · ' + pct(goalR) + '% right goal',
+    color: players[winner].color,
+  };
+  (why === 'collapse' ? sndCollapse : sndGoal)();
+  if (players[winner].score >= CFG.WIN_SCORE) {
+    state = 'over';
+    const msg = players[winner].name + ' WINS ' + players[0].score + '–' + players[1].score;
+    setTimeout(() => {
+      if (mode === 'net') leaveOnline();
+      toMenu(msg);
+    }, 1800);
+  } else {
+    state = 'pause'; pauseT = 1.5;
+  }
+}
+
+function reServe(text) {
+  banner = { text, sub: 'dead heat — re-serve', color: '#6d5c42' };
+  sndCollapse();
+  state = 'pause'; pauseT = 1.5;
+}
+
+// ============================== INPUT ======================================
+const keys = new Set();
+addEventListener('keydown', (e) => {
+  audioInit();
+  if (!e.repeat && state === 'play') {
+    if (mode === 'net') {
+      const fwd = players[NET.myIdx].dir;
+      if (e.code === 'KeyD' || e.code === 'ArrowRight' || e.code === 'Space') requestKick(fwd);
+      if (e.code === 'KeyA' || e.code === 'ArrowLeft') requestKick(-fwd);
+    } else {
+      if (e.code === 'KeyD') kick(0, +1);
+      if (e.code === 'KeyA') kick(0, -1);
+      if (mode === '2p') {
+        if (e.code === 'ArrowLeft') kick(1, -1);
+        if (e.code === 'ArrowRight') kick(1, +1);
+      } else {
+        if (e.code === 'ArrowRight' || e.code === 'Space') kick(0, +1);
+        if (e.code === 'ArrowLeft') kick(0, -1);
+      }
+    }
+  }
+  keys.add(e.code);
+  if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
+});
+addEventListener('keyup', (e) => keys.delete(e.code));
+
+const touches = new Map();
+cv.addEventListener('pointerdown', (e) => {
+  audioInit();
+  cv.setPointerCapture(e.pointerId);
+  const r = cv.getBoundingClientRect();
+  let side = 0;
+  if (mode === '2p') side = (e.clientX - r.left) < r.width / 2 ? 0 : 1;
+  if (mode === 'net') side = NET.myIdx;
+  touches.set(e.pointerId, {
+    side, x: e.clientX, y: e.clientY, t: performance.now(),
+    downX: e.clientX, downY: e.clientY, downT: performance.now(),
+    flickV: 0, moved: false,
+  });
+});
+cv.addEventListener('pointermove', (e) => {
+  const s = touches.get(e.pointerId);
+  if (!s || state !== 'play') return;
+  const r = cv.getBoundingClientRect();
+  const now = performance.now();
+  const dy = e.clientY - s.y, dx = e.clientX - s.x;
+  const dt = Math.max(1, now - s.t);
+  const du = (dy * (CH / r.height)) / (FH * 0.55);
+  if (mode === 'net') NET.myUT = clamp(NET.myUT + du, 0, 1);
+  else players[s.side].uT = clamp(players[s.side].uT + du, 0, 1);
+  const v = (dx * (CW / r.width)) / dt * 1000;
+  s.flickV = s.flickV * 0.6 + v * 0.4;
+  if (Math.abs(e.clientX - s.downX) + Math.abs(e.clientY - s.downY) > 14) s.moved = true;
+  if (Math.abs(s.flickV) > 1300) {
+    if (mode === 'net') requestKick(s.flickV > 0 ? 1 : -1);
+    else kick(s.side, s.flickV > 0 ? 1 : -1);
+    s.flickV = 0;
+  }
+  s.x = e.clientX; s.y = e.clientY; s.t = now;
+});
+function pointerEnd(e) {
+  const s = touches.get(e.pointerId);
+  touches.delete(e.pointerId);
+  if (!s || state !== 'play') return;
+  if (!s.moved && performance.now() - s.downT < 280) {
+    if (mode === 'net') requestKick(players[NET.myIdx].dir);
+    else kick(s.side, players[s.side].dir);
+  }
+}
+cv.addEventListener('pointerup', pointerEnd);
+cv.addEventListener('pointercancel', (e) => touches.delete(e.pointerId));
+cv.addEventListener('contextmenu', (e) => e.preventDefault());
+
+document.getElementById('btn1p').addEventListener('click', () => startGame('1p'));
+document.getElementById('btn2p').addEventListener('click', () => startGame('2p'));
+document.getElementById('btnNet').addEventListener('click', goOnline);
+document.getElementById('btnCancel').addEventListener('click', () => { leaveOnline(); setLobby(''); });
+document.getElementById('menuBtn').addEventListener('click', () => {
+  if (mode === 'net') { leaveOnline(); toMenu(''); }
+  else toMenu('');
+});
+
+// ============================== BOT ========================================
+function botUpdate(dt) {
+  const p = players[1];
+  bot.t -= dt;
+  if (bot.t <= 0) {
+    bot.t = CFG.BOT.react;
+    let sy = 0, sx = 0, sw = 0;
+    for (let iy = 0; iy < NY; iy += 2) {
+      const y = (iy + 0.5) * CY, row = iy * NX;
+      for (let ix = 0; ix < NX; ix += 2) {
+        const x = (ix + 0.5) * CX;
+        let w = dens[row + ix] * Math.max(0, x - FW * 0.3);
+        if (w <= 0) continue;
+        sy += y * w; sx += x * w; sw += w;
+      }
+    }
+    if (sw > 1e-9) {
+      const aim = sy / sw + (Math.random() - 0.5) * 2 * CFG.BOT.noise;
+      const cx = sx / sw;
+      const rod = cx > FW * 0.56 ? RODS[7] : RODS[4];
+      bot.target = rodAlignU(rod, aim);
+    } else {
+      bot.target = 0.5;
+    }
+    if (p.cd <= 0 && Math.random() < 0.85) {
+      let mass = 0;
+      for (const rod of RODS) {
+        if (rod.owner !== 1) continue;
+        const c0 = Math.max(0, Math.floor((rod.x - CFG.KICK_REACH * 0.8) / CX));
+        const c1 = Math.min(NX - 1, Math.ceil((rod.x + 8) / CX));
+        for (let k = 0; k < rod.n; k++) {
+          const my = rod.top + MAN_H / 2 + k * rod.sp;
+          const r0 = Math.max(0, Math.floor((my - MAN_H * 0.8) / CY));
+          const r1 = Math.min(NY - 1, Math.ceil((my + MAN_H * 0.8) / CY));
+          for (let iy = r0; iy <= r1; iy++) {
+            const row = iy * NX;
+            for (let ix = c0; ix <= c1; ix++) mass += dens[row + ix];
+          }
+        }
+      }
+      if (mass > CFG.BOT.kickMass) kick(1, -1);
+    }
+  }
+  const d = bot.target - p.uT;
+  p.uT = clamp(p.uT + clamp(d, -CFG.BOT.speed * dt, CFG.BOT.speed * dt), 0, 1);
+}
+
+function rodAlignU(rod, y) {
+  let best = 0.5, be = 1e9;
+  for (let k = 0; k < rod.n; k++) {
+    const u = clamp((y - MAN_H / 2 - k * rod.sp) / rod.travel, 0, 1);
+    const my = u * rod.travel + MAN_H / 2 + k * rod.sp;
+    const e = Math.abs(my - y);
+    if (e < be) { be = e; best = u; }
+  }
+  return best;
+}
+
+// ============================== RENDER =====================================
+function render() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(bg, 0, 0);
+  ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+
+  renderField();
+
+  const gy = FY + FH / 2;
+  for (const side of [-1, 1]) {
+    const mass = side < 0 ? goalL : goalR;
+    if (mass < 0.005) continue;
+    const p = side < 0 ? players[1] : players[0];
+    const gx = side < 0 ? FX : FX + FW;
+    const gr = ctx.createRadialGradient(gx, gy, 4, gx, gy, 60 + 220 * mass);
+    gr.addColorStop(0, p.glow + Math.min(0.5, 0.15 + mass) + ')');
+    gr.addColorStop(1, p.glow + '0)');
+    ctx.fillStyle = gr;
+    ctx.fillRect(FX - 26, FY, FW + 52, FH);
+  }
+
+  for (const rod of RODS) {
+    const p = players[rod.owner];
+    const rx = FX + rod.x;
+    ctx.strokeStyle = 'rgba(120,102,74,0.4)'; // steel rod on pale felt
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(rx, FY); ctx.lineTo(rx, FY + FH); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,250,235,0.5)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(rx - 1, FY); ctx.lineTo(rx - 1, FY + FH); ctx.stroke();
+
+    let ox = 0, up = false;
+    if (p.kick) {
+      const t = Math.min(1, p.kick.t / CFG.KICK_DUR);
+      ox = p.kick.dir * Math.sin(t * Math.PI) * 24;
+      up = true;
+    }
+    for (let k = 0; k < rod.n; k++) {
+      const my = FY + rod.top + MAN_H / 2 + k * rod.sp;
+      ctx.globalAlpha = up ? 0.5 : 1;
+      ctx.fillStyle = p.color;
+      roundRect(ctx, rx + ox - MAN_W / 2, my - MAN_H / 2, MAN_W, MAN_H, 6);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(38,26,14,0.55)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = 'rgba(255,246,226,0.75)'; // painted belt stripe
+      ctx.fillRect(rx + ox - MAN_W / 2 + 3, my - 3, MAN_W - 6, 5);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  drawHUD(gy);
+  if (banner) drawBanner();
+  if (mode === 'net' && state === 'play' && NET.stallT > 0.5) {
+    ctx.font = '700 14px ' + FONT_D;
+    ctx.fillStyle = INK_SOFT + '0.9)';
+    ctx.textAlign = 'center';
+    ctx.fillText('WAITING FOR OPPONENT…', CW / 2, FY + 24);
+  }
+}
+
+function drawHUD(gy) {
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  // painted scoreboard numerals on the paper margin
+  ctx.font = '700 38px ' + FONT_D;
+  ctx.fillStyle = players[0].color; ctx.fillText(String(players[0].score), FX + 40, 36);
+  ctx.fillStyle = players[1].color; ctx.fillText(String(players[1].score), FX + FW - 40, 36);
+  ctx.font = '700 14px ' + FONT_D;
+  const meTag = (i) => mode === 'net' && NET.myIdx === i ? ' · YOU' : '';
+  ctx.fillStyle = players[0].color; ctx.fillText('RED' + meTag(0), FX + 122, 38);
+  ctx.fillStyle = players[1].color; ctx.fillText('BLUE' + meTag(1), FX + FW - 122, 38);
+  ctx.font = '700 21px ' + FONT_D;
+  ctx.fillStyle = INK;
+  ctx.fillText('F O O S E N B A L L', CW / 2, 28);
+  ctx.font = '600 11px ' + FONT_D;
+  ctx.fillStyle = INK_SOFT + '0.8)';
+  const label = mode === '1p' ? 'VS THE HOUSE' : mode === '2p' ? 'SAME TABLE' : 'OPEN CHALLENGE · P2P';
+  ctx.fillText(label + ' · FIRST TO ' + CFG.WIN_SCORE, CW / 2, 51);
+
+  // probability gauges beside each goal (thermometer to the 50% mark)
+  for (const side of [-1, 1]) {
+    const mass = side < 0 ? goalL : goalR;
+    const benef = side < 0 ? players[1] : players[0];
+    const mx = side < 0 ? 26 : CW - 42;
+    const mh = GH, my0 = gy - mh / 2;
+    ctx.fillStyle = 'rgba(255,250,238,0.75)';
+    ctx.fillRect(mx, my0, 16, mh);
+    ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
+    ctx.strokeRect(mx, my0, 16, mh);
+    const frac = Math.min(1, mass / CFG.GOAL_FRACTION);
+    if (frac > 0.003) {
+      ctx.fillStyle = benef.color;
+      const fh = (mh - 6) * frac;
+      ctx.fillRect(mx + 3, my0 + 3 + (mh - 6 - fh), 10, fh);
+    }
+    ctx.font = '700 13px ' + FONT_D;
+    ctx.fillStyle = mass > 0.004 ? benef.color : INK_SOFT + '0.7)';
+    ctx.fillText(pct(mass) + '%', mx + 8, my0 + mh + 18);
+    ctx.font = '700 9px ' + FONT_D;
+    ctx.fillStyle = INK_SOFT + '0.7)';
+    ctx.fillText('GOAL', mx + 8, my0 - 12);
+  }
+
+  const fm = Math.max(0, 1 - goalL - goalR);
+  ctx.font = '600 12px ' + FONT_D;
+  ctx.fillStyle = INK_SOFT + '0.8)';
+  ctx.fillText('ψ ON FIELD ' + pct(fm) + '%', CW / 2, CH - 14);
+}
+
+function drawBanner() {
+  // printed match ticket
+  ctx.save();
+  ctx.translate(CW / 2, CH / 2);
+  ctx.rotate(-0.012);
+  ctx.fillStyle = 'rgba(243,236,217,0.96)';
+  ctx.fillRect(-330, -64, 660, 128);
+  ctx.strokeStyle = INK; ctx.lineWidth = 2;
+  ctx.strokeRect(-330, -64, 660, 128);
+  ctx.strokeStyle = banner.color; ctx.lineWidth = 2;
+  ctx.strokeRect(-322, -56, 644, 112);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = '700 30px ' + FONT_D;
+  ctx.fillStyle = banner.color;
+  ctx.fillText(banner.text, 0, -14);
+  ctx.font = '600 14px ' + FONT_D;
+  ctx.fillStyle = INK;
+  ctx.fillText(banner.sub, 0, 26);
+  ctx.restore();
+}
+
+// ============================== MAIN LOOP ==================================
+initGrid(LOCAL_NX, 128);
+for (const rod of RODS) rod.top = players[rod.owner].u * rod.travel;
+serve(); // ambient wave behind the menu
+
+let last = performance.now(), acc = 0;
+let stepMsAvg = 4, degraded = false;
+
+function pump(now) {
+  const dt = Math.min(0.05, (now - last) / 1000 || 0.016);
+  last = now;
+  acc += dt;
+  const active = state === 'play' || state === 'pause';
+  let n = 0;
+  const t0 = performance.now();
+  if (mode === 'net' && NET.phase === 'play') {
+    let advanced = false;
+    while (acc >= CFG.TICK && n < 4 && active) {
+      if (!netTick()) break;
+      acc -= CFG.TICK; n++; advanced = true;
+    }
+    if (!advanced && active) {
+      NET.stallT += dt;
+      if (acc > CFG.TICK * 3) acc = CFG.TICK * 3;
+      if (NET.stallT > 10) endNet('CONNECTION LOST');
+    } else {
+      NET.stallT = 0;
+    }
+  } else {
+    while (acc >= CFG.TICK && n < 4) {
+      if (active) tickSim();
+      else idleTick();
+      acc -= CFG.TICK; n++;
+    }
+    if (n === 4) acc = 0;
+  }
+  if (n > 0 && active) {
+    stepMsAvg = stepMsAvg * 0.95 + ((performance.now() - t0) / n) * 0.05;
+    if (!degraded && mode !== 'net' && stepMsAvg > 14 && DT < 1 / 61) {
+      degraded = true; DT = 1 / 60; buildK(DT);
+    }
+  }
+  if (n > 0 || state === 'menu') densityPass();
+  scoringUIOnly();
+}
+
+function scoringUIOnly() { /* scoring runs inside ticks; nothing async needed */ }
+
+function idleTick() {
+  // gentle ambient evolution behind the menu
+  for (const rod of RODS) { rod.vy = 0; }
+  const steps = DT < 1 / 100 ? 2 : 1;
+  for (let s = 0; s < steps; s++) stepField();
+  renormalize();
+}
+
+function frame(now) {
+  pump(now);
+  render();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// keep the sim (and lockstep partner) fed while the tab is hidden
+setInterval(() => { if (document.hidden) pump(performance.now()); }, 50);
+
+drawTable(bg.getContext('2d'));
+
+// test hook: lets a harness drive an online match with a fake transport
+window.__NETTEST = {
+  connect(transport, isHost, seed) {
+    TRY = { selfId: isHost ? 'a-host' : 'b-guest' };
+    NET.phase = 'lobby';
+    NET.room = { leave() {} };
+    NET.send = transport.send;
+    transport.onIn((d, id) => { if (NET.phase === 'play' && id === NET.partner) NET.inQ[1 - NET.myIdx].set(d.t, d); });
+    beginMatch(isHost ? 'b-guest' : 'a-host', isHost, seed);
+  },
+  setUT(u) { NET.myUT = u; },
+  kick(dir) { NET.pendingKicks.push(dir); },
+  hash: stateHash,
+  info() { return { tick: NET.tick, goalL, goalR, scores: [players[0].score, players[1].score], state }; },
+};
+</script>
+</body>
+</html>
