@@ -1538,7 +1538,9 @@ cv.addEventListener('wheel', (e) => {
     if (d < bd) { bd = d; best = rod; }
   }
   if (!best) return;
-  const du = clamp(e.deltaY, -120, 120) * 0.0016;
+  // scroll gesture up = rod up (matches macOS natural scrolling; flip sign if
+  // a traditional wheel feels reversed)
+  const du = clamp(e.deltaY, -120, 120) * -0.0016;
   if (mode === 'net') {
     const idx = RODS.filter((rd) => rd.owner === owner).indexOf(best);
     NET.myOff[idx] = clamp(NET.myOff[idx] + du, -1, 1);
