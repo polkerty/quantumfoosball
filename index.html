@@ -64,6 +64,9 @@
   #lobby .pulse { animation: pulse 1.4s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
   #lobby button { margin-top: 12px; min-width: 130px; padding: 10px 16px; font-size: 12px; }
+  #scrollPref { margin-top: 12px; }
+  #scrollPref button { min-width: 0; padding: 7px 14px; font-size: 11px; letter-spacing: 0.1em; border-width: 1.5px; color: var(--ink-soft); border-color: var(--ink-soft); }
+  #scrollPref button:hover, #scrollPref button:focus-visible { background: var(--ink-soft); color: var(--card); }
   #menu .help { margin-top: 22px; font-size: 12px; line-height: 1.85; color: var(--ink-soft); text-align: left; border-top: 1px solid rgba(36,28,18,0.25); padding-top: 14px; }
   #menu .help b { color: var(--ink); font-weight: 600; }
   #menu .help .p1 { color: var(--red); font-weight: 600; } #menu .help .p2 { color: var(--blue); font-weight: 600; }
@@ -94,6 +97,7 @@
       <div class="status pulse" id="lobbyStatus">CONNECTING…</div>
       <button id="btnCancel">CANCEL</button>
     </div>
+    <div id="scrollPref"><button id="btnScroll"></button></div>
     <div class="help">
       <b>House rules:</b> herd ≥50% of the ball's probability into the far goal. First to 5.<br>
       <b>Move:</b> W/S or ↑/↓ &nbsp;·&nbsp; <b>Kick:</b> D / → / Space forward · A / ← back<br>
@@ -952,6 +956,9 @@ function stateHash() {
 
 // ============================== TICK LOGIC =================================
 // All game state advances in fixed TICK steps so online lockstep is exact.
+const OFF_RECAPTURE = 1.5; // global rod movement bleeds solo offsets back to zero
+const shrink = (v, amt) => v > 0 ? Math.max(0, v - amt) : Math.min(0, v + amt);
+
 function tickSim() {
   const dt = CFG.TICK;
   if (mode !== 'net' && state === 'play') {
@@ -965,6 +972,15 @@ function tickSim() {
       if (keys.has('ArrowUp')) players[0].uT = clamp(players[0].uT - sp * dt, 0, 1);
       if (keys.has('ArrowDown')) players[0].uT = clamp(players[0].uT + sp * dt, 0, 1);
       botUpdate(dt);
+    }
+    // moving all rods together gradually recaptures solo-scrolled rods
+    for (const p of players) {
+      const d = Math.abs(p.uT - (p.uTPrev ?? p.uT));
+      p.uTPrev = p.uT;
+      if (d > 1e-6) {
+        const idx = players.indexOf(p);
+        for (const rod of RODS) if (rod.owner === idx) rod.uOff = shrink(rod.uOff, d * OFF_RECAPTURE);
+      }
     }
   }
   for (const p of players) {
@@ -1136,7 +1152,7 @@ function beginMatch(partnerId, isHost, seed) {
   NET.tick = 0; NET.stallT = 0;
   NET.inQ = [new Map(), new Map()];
   NET.sums.clear();
-  NET.myUT = 0.5; NET.pendingKicks = []; NET.myOff = [0, 0, 0, 0];
+  NET.myUT = 0.5; NET.myUTPrev = 0.5; NET.pendingKicks = []; NET.myOff = [0, 0, 0, 0];
   resetRodOffsets();
   for (let t = 0; t < CFG.NET_DELAY; t++) {
     NET.inQ[0].set(t, { t, u: 500, k: [], o: [0, 0, 0, 0] });
@@ -1167,6 +1183,10 @@ function netProduceInput(forTick) {
   if (keys.has('KeyW') || keys.has('ArrowUp')) d -= 1;
   if (keys.has('KeyS') || keys.has('ArrowDown')) d += 1;
   NET.myUT = clamp(NET.myUT + d * sp * dt, 0, 1);
+  // global movement recaptures solo offsets (sender-side, so lockstep peers agree)
+  const dGlob = Math.abs(NET.myUT - (NET.myUTPrev ?? NET.myUT));
+  NET.myUTPrev = NET.myUT;
+  if (dGlob > 1e-6) NET.myOff = NET.myOff.map((v) => shrink(v, dGlob * OFF_RECAPTURE));
   const msg = {
     t: forTick,
     u: Math.round(NET.myUT * 1000),
@@ -1523,6 +1543,22 @@ cv.addEventListener('pointerup', pointerEnd);
 cv.addEventListener('pointercancel', (e) => touches.delete(e.pointerId));
 cv.addEventListener('contextmenu', (e) => e.preventDefault());
 
+// scroll direction preference — the OS transforms wheel deltas before the
+// browser sees them (natural scrolling is undetectable), so this is a saved
+// per-device choice rather than auto-detection
+let scrollFlip = false;
+try { scrollFlip = localStorage.getItem('qf_scrollFlip') === '1'; } catch (e) {}
+function scrollPrefLabel() {
+  document.getElementById('btnScroll').textContent =
+    'SCROLL GESTURE ↑ = ROD ' + (scrollFlip ? '↓' : '↑') + ' — TAP TO FLIP';
+}
+scrollPrefLabel();
+document.getElementById('btnScroll').addEventListener('click', () => {
+  scrollFlip = !scrollFlip;
+  try { localStorage.setItem('qf_scrollFlip', scrollFlip ? '1' : '0'); } catch (e) {}
+  scrollPrefLabel();
+});
+
 // scroll over one of your rods to move just that rod
 cv.addEventListener('wheel', (e) => {
   if (state !== 'play') return;
@@ -1538,9 +1574,7 @@ cv.addEventListener('wheel', (e) => {
     if (d < bd) { bd = d; best = rod; }
   }
   if (!best) return;
-  // scroll gesture up = rod up (matches macOS natural scrolling; flip sign if
-  // a traditional wheel feels reversed)
-  const du = clamp(e.deltaY, -120, 120) * -0.0016;
+  const du = clamp(e.deltaY, -120, 120) * 0.0016 * (scrollFlip ? 1 : -1);
   if (mode === 'net') {
     const idx = RODS.filter((rd) => rd.owner === owner).indexOf(best);
     NET.myOff[idx] = clamp(NET.myOff[idx] + du, -1, 1);
@@ -1688,21 +1722,23 @@ function drawHUD(gy, mir) {
   const L = mir ? players[1] : players[0];
   const R = mir ? players[0] : players[1];
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  // painted scoreboard numerals on the paper margin
-  ctx.font = '700 38px ' + FONT_D;
-  ctx.fillStyle = L.color; ctx.fillText(String(L.score), FX + 40, 36);
-  ctx.fillStyle = R.color; ctx.fillText(String(R.score), FX + FW - 40, 36);
+  // painted scoreboard on the paper margin — the cabinet frame starts at
+  // y = 50, so everything up here must clear it
+  ctx.font = '700 34px ' + FONT_D;
+  ctx.fillStyle = L.color; ctx.fillText(String(L.score), FX + 40, 29);
+  ctx.fillStyle = R.color; ctx.fillText(String(R.score), FX + FW - 40, 29);
   ctx.font = '700 14px ' + FONT_D;
   const meTag = (p) => mode === 'net' && players[NET.myIdx] === p ? ' · YOU' : '';
-  ctx.fillStyle = L.color; ctx.fillText(L.name + meTag(L), FX + 122, 38);
-  ctx.fillStyle = R.color; ctx.fillText(R.name + meTag(R), FX + FW - 122, 38);
+  ctx.fillStyle = L.color; ctx.fillText(L.name + meTag(L), FX + 122, 31);
+  ctx.fillStyle = R.color; ctx.fillText(R.name + meTag(R), FX + FW - 122, 31);
   ctx.font = '700 19px ' + FONT_D;
   ctx.fillStyle = INK;
-  ctx.fillText('Q U A N T U M   F O O S B A L L', CW / 2, 28);
+  ctx.fillText('Q U A N T U M   F O O S B A L L', CW / 2, 21);
   ctx.font = '600 11px ' + FONT_D;
-  ctx.fillStyle = INK_SOFT + '0.8)';
+  ctx.fillStyle = INK_SOFT + '0.85)';
+  const fm = Math.max(0, 1 - goalL - goalR);
   const label = mode === '1p' ? 'VS BOT' : mode === '2p' ? 'SAME TABLE' : 'VS LOBBY · P2P';
-  ctx.fillText(label + ' · FIRST TO ' + CFG.WIN_SCORE, CW / 2, 51);
+  ctx.fillText(label + ' · FIRST TO ' + CFG.WIN_SCORE + ' · ψ ON FIELD ' + pct(fm) + '%', CW / 2, 42);
 
   // probability gauges beside each goal (thermometer to the 50% mark)
   for (const side of [-1, 1]) {
@@ -1729,10 +1765,6 @@ function drawHUD(gy, mir) {
     ctx.fillText('GOAL', mx + 8, my0 - 12);
   }
 
-  const fm = Math.max(0, 1 - goalL - goalR);
-  ctx.font = '600 12px ' + FONT_D;
-  ctx.fillStyle = INK_SOFT + '0.8)';
-  ctx.fillText('ψ ON FIELD ' + pct(fm) + '%', CW / 2, CH - 14);
 }
 
 function drawBanner() {
