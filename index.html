@@ -87,9 +87,8 @@
     <div class="tag">Foosenball · Regulation table · Nonregulation ball</div>
     <div class="msg" id="menuMsg"></div>
     <div class="btns" id="menuBtns">
-      <button id="btn1p">1P · VS THE HOUSE</button>
-      <button id="btn2p">2P · SAME TABLE</button>
-      <button id="btnNet" class="online">OPEN CHALLENGE · ONLINE</button>
+      <button id="btn1p">VS BOT</button>
+      <button id="btnNet" class="online">VS LOBBY</button>
     </div>
     <div id="lobby">
       <div class="status pulse" id="lobbyStatus">CONNECTING…</div>
@@ -97,10 +96,9 @@
     </div>
     <div class="help">
       <b>House rules:</b> herd ≥50% of the ball's probability into the far goal. First to 5.<br>
-      <b class="p1">Red (left)</b> — <b>W/S</b> move rods · <b>D</b> kick forward · <b>A</b> kick back<br>
-      <b class="p2">Blue (right)</b> — <b>↑/↓</b> move rods · <b>←</b> kick forward · <b>→</b> kick back<br>
-      <b>Online:</b> W/S or ↑/↓ move · D/→/Space kick forward · A/← kick back (you may draw either color)<br>
-      <b>Touch:</b> drag your half to move rods · flick sideways or tap to kick<br>
+      <b>Move:</b> W/S or ↑/↓ &nbsp;·&nbsp; <b>Kick:</b> D / → / Space forward · A / ← back<br>
+      <b>Touch:</b> drag to move rods · flick sideways or tap to kick<br>
+      You play <b class="p1">Red</b> against the bot; in the lobby you may draw <b class="p1">Red</b> or <b class="p2">Blue</b>.<br>
       <b>The ball:</b> a complex wavefunction under the Schrödinger equation. Kicks boost only
       the probability actually at your feet; the ball disperses, diffracts around players,
       interferes with itself, and tunnels through thin defenses. Online matches run the same
@@ -1038,7 +1036,6 @@ cv.addEventListener('pointercancel', (e) => touches.delete(e.pointerId));
 cv.addEventListener('contextmenu', (e) => e.preventDefault());
 
 document.getElementById('btn1p').addEventListener('click', () => startGame('1p'));
-document.getElementById('btn2p').addEventListener('click', () => startGame('2p'));
 document.getElementById('btnNet').addEventListener('click', goOnline);
 document.getElementById('btnCancel').addEventListener('click', () => { leaveOnline(); setLobby(''); });
 document.getElementById('menuBtn').addEventListener('click', () => {
@@ -1179,7 +1176,7 @@ function drawHUD(gy) {
   ctx.fillText('Q U A N T U M   F O O S B A L L', CW / 2, 28);
   ctx.font = '600 11px ' + FONT_D;
   ctx.fillStyle = INK_SOFT + '0.8)';
-  const label = mode === '1p' ? 'VS THE HOUSE' : mode === '2p' ? 'SAME TABLE' : 'OPEN CHALLENGE · P2P';
+  const label = mode === '1p' ? 'VS BOT' : mode === '2p' ? 'SAME TABLE' : 'VS LOBBY · P2P';
   ctx.fillText(label + ' · FIRST TO ' + CFG.WIN_SCORE, CW / 2, 51);
 
   // probability gauges beside each goal (thermometer to the 50% mark)
