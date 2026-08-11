@@ -104,7 +104,7 @@
   <div class="card">
     <h1>QUANTUM <em>FOOSBALL</em></h1>
     <div class="rule"></div>
-    <div class="tag">Foosenball · Regulation table · Nonregulation ball</div>
+    <div class="tag">Regulation table · Nonregulation ball</div>
     <div class="msg" id="menuMsg"></div>
     <div class="btns" id="menuBtns">
       <button id="btn1p">VS BOT</button>
@@ -1062,7 +1062,7 @@ function kick(pIdx, dir) {
 // for tick T+NET_DELAY and only advances tick T once both inputs for T exist,
 // so both machines run the identical simulation from a shared seed.
 const PROTO = 2; // lockstep protocol version — bump on any input-schema or sim change
-const BUILD = 'r12'; // bump each deploy — shown on the menu so mismatched windows are obvious
+const BUILD = 'r13'; // bump each deploy — shown on the menu so mismatched windows are obvious
 const NET = {
   phase: 'off', // 'off' | 'lobby' | 'play'
   room: null, partner: null, isHost: false, myIdx: 0,
